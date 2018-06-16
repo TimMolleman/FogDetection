@@ -1,0 +1,10 @@
+# Ignore helper files and data files (contain sensitive files also)
+data/helpers/*
+data/semi-processed/*
+data/processed/*
+
+# Keep the folders 
+!data/helpers/.gitkeep
+!data/semi-processed/.gitkeep
+!data/processed/.gitkeep 
+
