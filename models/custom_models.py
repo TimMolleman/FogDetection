@@ -1,3 +1,5 @@
+from torch import nn
+
 class meteo_NN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(meteo_NN, self).__init__()

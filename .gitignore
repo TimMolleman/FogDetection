@@ -8,3 +8,8 @@ data/processed/*
 !data/semi-processed/.gitkeep
 !data/processed/.gitkeep 
 
+# Don't keep cache
+__pycache__
+
+# Notebook checkpoints
+.ipynb_checkpoints

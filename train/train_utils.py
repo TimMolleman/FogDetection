@@ -1,7 +1,13 @@
 import torch
 import numpy as np
+import torchvision
+import torch.nn as nn
+import time
 
-def train_model(data_loaders, model, weights, args):
+from torch.autograd import Variable
+
+
+def train_model(model, data_loaders, weights, args):
 	'''
 	Main function used for training the networks.
 
@@ -17,7 +23,7 @@ def train_model(data_loaders, model, weights, args):
 		weights = weights.cuda()
 
 	# Define loss function, optimizer and start time
-	criterion = nn.CrossEntropyLoss(reduce=False, weight=inverse_weights)
+	criterion = nn.CrossEntropyLoss(reduce=False, weight=weights)
 	optimizer = torch.optim.Adam(optim_params, lr=args.lr)
 	start = time.time()
 
@@ -27,7 +33,7 @@ def train_model(data_loaders, model, weights, args):
 
 	for epoch in range(1, args.epochs+1):
 
-		model, measures, epoch_loss_train, epoch_loss_val = run_epoch(model, args)
+		model, measures, epoch_loss_train, epoch_loss_val = run_epoch(model, data_loaders, optimizer, criterion, epoch, start, args)
 		
 		# Update other checkpoints
 		checkpoint_dict = create_checkpoint(checkpoint_dict, model, measures, epoch_loss_train, epoch_loss_val)
@@ -65,7 +71,7 @@ def create_checkpoint(checkpoint_dict, model, measures, epoch_loss_train, epoch_
 
 	return checkpoint_dict
 
-def run_epoch(model, args):
+def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 	running_loss_train = 0.0
 	running_correct_train = 0.0
 	running_loss_val = 0.0
@@ -128,17 +134,42 @@ def run_epoch(model, args):
 				epoch_validation_predictions.extend(list(predictions))
 
 			 # If model is in training phase, show loss every N iterations
-			if (i+1) % 50 == 0:
+			if (i+1) % 2 == 0:
 				if phase == 'train':
-					print ('Epoch {}/{}, Iteration {}/{} Train Running Loss: {:.4f}'.format(epoch+1, num_epochs, i+1, 
-																				len(X_train)//BATCH_SIZE, 
-																				running_loss_train / i))                          
+					print ('Epoch {}/{}, Iteration {}/{} Train Running Loss: {:.4f}'.format(epoch+1, args.epochs, i+1, 
+																				len(loaders[phase].dataset)//args.batch_size, 
+																				running_loss_train / i))
+
+	cur_time = time.time() - start
+
+	 # Print the average epoch loss and the average prediction accuracy
+	print('\nEpoch {}/{}, Train Time: {:.0f}m {:.0f}s\n Train Loss: {:.4f}, Train Overall Accuracy: {:.4f}%\n'
+		  'Validation Loss: {:.4f}, Validation Overall Accuracy: {:.4f}%, Validation Avg Accuracy: {:.4f}% f1_macro: {:.4f}, f1_micro: {:.4f}\n'.format(epoch, 
+																				num_epochs, cur_time//60, cur_time%60, epoch_train_loss, epoch_train_accuracy,
+																				epoch_val_loss, epoch_val_accuracy, average_accuracy, f1_macro, f1_micro))                          
 
 	# Return measures to see if model is better than previous model
 	measures = epoch_scores(running_loss_train, running_correct_val, running_loss_val, running_correct_val, epoch_validation_targets,
-							epoch_validation_predictions, start)
+							epoch_validation_predictions, epoch, start)
 
 	return model, measures, running_loss_val, running_correct_val
+
+def epoch_metrics(val_predictions, val_targets, loaders, args):
+
+	# Epoch losses and epoch train accuracies
+	epoch_train_loss = running_loss_train / (len(loaders['train'].dataset)//args.batch_size)
+	epoch_train_accuracy = (running_correct_train / (len(loaders['train'].dataset)) / args.batch_size * 100
+	epoch_val_loss = running_loss_val / (len(loaders['validation'].dataset) // args.batch_size)
+	epoch_val_accuracy= (running_correct_val / (len(loaders['validation'].dataset) // args.batch_size)) / args.batch_size * 100
+
+	f1_macro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='macro')
+	f1_micro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='micro')
+	
+	# Average accuracy of epoch
+	average_accuracy = get_average_accuracy(val_predictions, val_targets)
+
+	return epoch_train_loss, epoch_train_accuracy, epoch_val_loss, epoch
+
 
 def get_average_accuracy(predictions, targets):
 	'''
@@ -176,8 +207,8 @@ def get_average_accuracy(predictions, targets):
 	return average_acc
 
 def epoch_scores(running_loss_train, running_correct_train, running_loss_val, 
-				running_correct_val, validation_targets, validation_predictions, start,
-				epoch):
+				running_correct_val, validation_targets, validation_predictions,
+				epoch, start):
 	
 	cur_time = time.time() - start
 
@@ -242,4 +273,8 @@ def calculate_loss_weights(train_targets):
 	inverse_weights = 1 / torch.Tensor(proportions)
 
 	return inverse_weights
+
+
+
+
 
