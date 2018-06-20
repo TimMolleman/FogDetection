@@ -348,10 +348,9 @@ def main():
 
 	# Create KNMI dict
 	KNMI_dict = {'images': KNMI_images, 'targets': KNMI_targets, 'filepaths': KNMI_filepaths, 'meteo': KNMI_meteo}
-	print('haha kanker')
+
 	# Load the test dictionaries
 	test_dict = df_to_test_dict(main_df, TEST_IMAGE_DIR, test_image_filename)
-
 
 	# Save the arrays into numpy dictionaries
 	np.save(PROCESSED_DIR + 'KNMI.npy', KNMI_dict)

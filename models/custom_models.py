@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 
 class meteo_NN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -28,11 +29,11 @@ class resnet18_meteo(nn.Module):
         # Extract convolutional block out of predefined network
         self.modules=list(self.resnet_CNN.children())[:-1]
         self.resnet18_convblocks= nn.Sequential(*self.modules)
-        
+
         self.fc = nn.Linear(self.len_fc_resnet + self.len_fc_meteo, num_classes)
 
     def forward(self, img_x, meteo_x):
-        
+
         # Both should be flattened layers at end of networks
         img_x = self.resnet18_convblocks(img_x)
         meteo_x = self.meteo_net(meteo_x)
@@ -46,9 +47,9 @@ class resnet18_meteo(nn.Module):
         out = self.fc(out)
         return out   
 
-class simple_CNN(nn.Module):
+class shallow_CNN(nn.Module):
     def __init__(self):
-        super(simple_CNN, self).__init__()
+        super(shallow_CNN, self).__init__()
         self.conv1 = nn.Sequential(         
             nn.Conv2d(
                 in_channels=3,              

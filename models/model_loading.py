@@ -1,6 +1,7 @@
 import torchvision
 import torch.nn as nn
 from models import custom_models
+import numpy as np
 
 def get_model(args):
 	'''
@@ -14,25 +15,29 @@ def get_model(args):
 		model = torchvision.models.resnet18(pretrained=True)
 		model.avgpool = nn.AdaptiveAvgPool2d(1)
 
+		for parameter in model.parameters():
+			parameter.requires_grad = False
+
 		# Replace the fully connected layer
 		num_features = model.fc.in_features
 		model.fc = nn.Linear(num_features, args.num_classes)
-		optim_params = model.fc.parameters()
-
+		
 		return model
 
-	elif args.model_name == 'simple_CNN':
+	elif args.model_name == 'shallow_CNN':
 
-		model = custom_models.simple_CNN()
+		model = custom_models.shallow_CNN()
 
 		return model
 
 	elif args.model_name == 'resnet+meteo_NN':
-
+		
 		resnet_model = torchvision.models.resnet18(pretrained=True)
+		resnet_model.avgpool = nn.AdaptiveAvgPool2d(1)
 		meteo_NN = custom_models.meteo_NN(args.meteo_inputs, args.meteo_hidden_size, args.meteo_outputs)
 
 		model = custom_models.resnet18_meteo(resnet_model, meteo_NN, args.num_classes)
+		
 
 		return model
 

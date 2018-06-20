@@ -58,8 +58,9 @@ def create_loader(dataset, type, batch_size):
 
     if type == 'train':
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    elif type == 'eval':
+    elif type == 'validation':
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-
+    elif type == 'test':
+        dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
 
     return dataloader

@@ -3,19 +3,25 @@ import numpy as np
 import torchvision
 import torch.nn as nn
 import time
+import copy
 
 from torch.autograd import Variable
+from sklearn.metrics import f1_score
 
 
 def train_model(model, data_loaders, weights, args):
 	'''
 	Main function used for training the networks.
 
-	:param train_data: 
+	:param model: Model to train
+	:param data_loaders: Dictionary containing train dataloader and validation dataloader
+	:param weights: Weights for the weighting of loss. Passed to criterion
 	'''
 
+	print('Start training of {} model:\n'.format(args.model_name))
+
 	# Get weights to optimize
-	optim_params = get_optim_params(model, args.from_conv_layer)
+	optim_params = get_optim_params(model, args)
 
 	# Enable cuda if available
 	if args.cuda:
@@ -28,7 +34,7 @@ def train_model(model, data_loaders, weights, args):
 	start = time.time()
 
 	# Dict for storing a number of important variables
-	checkpoint_dict = {'train_loss':[], 'validation_loss':[], 'best_f1macro': 0.0, 'best_epoch_f1' : 0,
+	checkpoint_dict = {'train_loss':[], 'validation_loss':[], 'best_f1macro': 0.0, 'best_epoch_f1' : 0.0,
 		'best_model_f1': model, 'best_avg_accuracy': 0.0, 'best_epoch_avg': 0, 'best_model_avg': model}
 
 	for epoch in range(1, args.epochs+1):
@@ -36,7 +42,7 @@ def train_model(model, data_loaders, weights, args):
 		model, measures, epoch_loss_train, epoch_loss_val = run_epoch(model, data_loaders, optimizer, criterion, epoch, start, args)
 		
 		# Update other checkpoints
-		checkpoint_dict = create_checkpoint(checkpoint_dict, model, measures, epoch_loss_train, epoch_loss_val)
+		create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train, epoch_loss_val)
 
 		# Save the checkpoint at specified path
 		torch.save(checkpoint_dict, args.save_path)
@@ -45,11 +51,11 @@ def train_model(model, data_loaders, weights, args):
 	elapsed_time = time.time() - start
 	print('Training was completed in {:.0f}m {:.0f}s\n'.format(elapsed_time//60, elapsed_time%60))
 	print('Best validation avg accuracy: {:.4f}% at epoch: {}'.format(checkpoint_dict['best_avg_accuracy'], checkpoint_dict['best_epoch_avg']))
-	print('Best validation f1-macro: {:.4f} at epoch: {}'.format(checkpoint_dict['best_accuracy'], checkpoint_dict['best_epoch_f1']))
+	print('Best validation f1-macro: {:.4f} at epoch: {}'.format(checkpoint_dict['best_f1macro'], checkpoint_dict['best_epoch_f1']))
 
 	return model
 
-def create_checkpoint(checkpoint_dict, model, measures, epoch_loss_train, epoch_loss_val):
+def create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train, epoch_loss_val):
 	'''
 	Adjusts the checkpoint dictionary after each epoch. Returns this adjusted dictionary. 
 
@@ -60,24 +66,24 @@ def create_checkpoint(checkpoint_dict, model, measures, epoch_loss_train, epoch_
 		checkpoint_dict['best_epoch_f1'] = epoch
 		checkpoint_dict['best_model_f1'] = copy.deepcopy(model)
 	if measures['avg_acc'] > checkpoint_dict['best_avg_accuracy']:
-		checkpoint_dict['best_avg_accuracy'] = average_accuracy
+		checkpoint_dict['best_avg_accuracy'] = measures['avg_acc']
 		checkpoint_dict['best_epoch_avg'] = epoch
 		checkpoint_dict['best_model_avg'] = copy.deepcopy(model)
 
-
 	# Extend arrays containing the loss
-	checkpoint_dict['train_loss'] = train_loss.append(epoch_loss_train)
-	checkpoint_dict['validation_loss'] = validation_loss.append(epoch_loss_val)
-
+	checkpoint_dict['train_loss'].append(epoch_loss_train)
+	checkpoint_dict['validation_loss'].append(epoch_loss_val)
+	
 	return checkpoint_dict
+
 
 def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 	running_loss_train = 0.0
 	running_correct_train = 0.0
 	running_loss_val = 0.0
 	running_correct_val = 0.0
-	epoch_validation_targets = []
-	epoch_validation_predictions = []
+	validation_targets = []
+	validation_predictions = []
 
 	for phase in ['train', 'validation']:
 
@@ -98,7 +104,7 @@ def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 				features = features.cuda()
 				targets = targets.cuda()
 				meteo_features = meteo_features.cuda()
-
+			print(features.size())
 			if phase == 'train':
 				optimizer.zero_grad()
 
@@ -130,52 +136,45 @@ def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 			else:
 				running_loss_val += total_loss.data[0]
 				running_correct_val += correct
-				epoch_validation_targets.extend(list(targets.data))
-				epoch_validation_predictions.extend(list(predictions))
+				validation_targets.extend(list(targets.data))
+				validation_predictions.extend(list(predictions))
 
-			 # If model is in training phase, show loss every N iterations
-			if (i+1) % 2 == 0:
-				if phase == 'train':
-					print ('Epoch {}/{}, Iteration {}/{} Train Running Loss: {:.4f}'.format(epoch+1, args.epochs, i+1, 
-																				len(loaders[phase].dataset)//args.batch_size, 
-																				running_loss_train / i))
+			# If model is in training phase, show loss every N iterations
+			# if (i+1) % 2 == 0:
+			if phase == 'train':
+				print ('Epoch {}/{}, Iteration {}/{} Train Running Loss: {:.4f}'.format(epoch, args.epochs, i+1, 
+																			len(loaders[phase].dataset)//args.batch_size + 1, 
+																			running_loss_train / (i+1)))
 
 	cur_time = time.time() - start
 
-	 # Print the average epoch loss and the average prediction accuracy
-	print('\nEpoch {}/{}, Train Time: {:.0f}m {:.0f}s\n Train Loss: {:.4f}, Train Overall Accuracy: {:.4f}%\n'
-		  'Validation Loss: {:.4f}, Validation Overall Accuracy: {:.4f}%, Validation Avg Accuracy: {:.4f}% f1_macro: {:.4f}, f1_micro: {:.4f}\n'.format(epoch, 
-																				num_epochs, cur_time//60, cur_time%60, epoch_train_loss, epoch_train_accuracy,
-																				epoch_val_loss, epoch_val_accuracy, average_accuracy, f1_macro, f1_micro))                          
-
-	# Return measures to see if model is better than previous model
-	measures = epoch_scores(running_loss_train, running_correct_val, running_loss_val, running_correct_val, epoch_validation_targets,
-							epoch_validation_predictions, epoch, start)
-
-	return model, measures, running_loss_val, running_correct_val
-
-def epoch_metrics(val_predictions, val_targets, loaders, args):
-
-	# Epoch losses and epoch train accuracies
+	# Gather epoch losses and evaluation metrics
 	epoch_train_loss = running_loss_train / (len(loaders['train'].dataset)//args.batch_size)
-	epoch_train_accuracy = (running_correct_train / (len(loaders['train'].dataset)) / args.batch_size * 100
+	epoch_train_accuracy = (running_correct_train / (len(loaders['train'].dataset)) / args.batch_size * 100)
 	epoch_val_loss = running_loss_val / (len(loaders['validation'].dataset) // args.batch_size)
 	epoch_val_accuracy= (running_correct_val / (len(loaders['validation'].dataset) // args.batch_size)) / args.batch_size * 100
+	f1_macro = f1_score(validation_targets, validation_predictions, average='macro')
+	f1_micro = f1_score(validation_targets, validation_predictions, average='micro')
+	average_accuracy = get_average_accuracy(validation_predictions, validation_targets)
 
-	f1_macro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='macro')
-	f1_micro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='micro')
-	
-	# Average accuracy of epoch
-	average_accuracy = get_average_accuracy(val_predictions, val_targets)
 
-	return epoch_train_loss, epoch_train_accuracy, epoch_val_loss, epoch
+	# Print the average epoch loss and the average prediction accuracy
+	print('\nEpoch {}/{}, Train Time: {:.0f}m {:.0f}s\n Train Loss: {:.4f}, Train Overall Accuracy: {:.4f}%\n'
+		  'Validation Loss: {:.4f}, Validation Overall Accuracy: {:.4f}%, Validation Avg Accuracy: {:.4f}% f1_macro: {:.4f}, f1_micro: {:.4f}\n'.format(epoch, 
+																				args.epochs, cur_time//60, cur_time%60, epoch_train_loss, epoch_train_accuracy,
+																				epoch_val_loss, epoch_val_accuracy, average_accuracy, f1_macro, f1_micro))                          
 
+	# Save the model state selection measures
+	selection_measures = {'f1_macro' : f1_macro, 'avg_acc' : average_accuracy}
+
+	return model, selection_measures, running_loss_val, running_correct_val
 
 def get_average_accuracy(predictions, targets):
 	'''
-	Calculate the average accuracy.
+	Calculate the average accuracy for an epoch.
 
-	:param predictions: 
+	:param predictions: Numpy array containing predictions of model training epoch.
+	:param targets: Numpy array containing targets of model training epoch.
 	'''
   
 	# Lists for holding corrects
@@ -192,7 +191,7 @@ def get_average_accuracy(predictions, targets):
 			dense_fog_correct += 1
 
 	# Validation counts
-	total = np.bincount(validation_targets)
+	total = np.bincount(targets)
 	no_fog_total = total[0]
 	light_fog_total = total[1]
 	dense_fog_total = total[2]
@@ -206,69 +205,74 @@ def get_average_accuracy(predictions, targets):
 
 	return average_acc
 
-def epoch_scores(running_loss_train, running_correct_train, running_loss_val, 
-				running_correct_val, validation_targets, validation_predictions,
-				epoch, start):
-	
-	cur_time = time.time() - start
+def get_optim_params(model, args):
+	'''
+	Retrieve the weights that have to be optimized.
 
-	# Epoch losses and epoch train accuracies
-	epoch_train_loss = running_loss_train / (len(X_train)//BATCH_SIZE)
-	epoch_train_accuracy = (running_correct_train / (len(X_train)//BATCH_SIZE)) / BATCH_SIZE * 100
-	epoch_val_loss = running_loss_val / (len(X_validation) // BATCH_SIZE)
-	epoch_val_accuracy= (running_correct_val / (len(X_validation) // BATCH_SIZE)) / BATCH_SIZE * 100
+	:param model: Model class to be trained
+	:param args: Parser arguments
+	'''
 
-	f1_macro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='macro')
-	f1_micro = f1_score(epoch_validation_targets, epoch_validation_predictions, average='micro')
-	
-	# Average accuracy of epoch
-	average_accuracy = get_average_accuracy(validation_predictions, validation_targets)
+	if args.model_name != 'shallow_CNN':
 
-	 # Print the average epoch loss and the average prediction accuracy
-	print('\nEpoch {}/{}, Train Time: {:.0f}m {:.0f}s\n Train Loss: {:.4f}, Train Overall Accuracy: {:.4f}%\n'
-		  'Validation Loss: {:.4f}, Validation Overall Accuracy: {:.4f}%, Validation Avg Accuracy: {:.4f}% f1_macro: {:.4f}, f1_micro: {:.4f}\n'.format(epoch, 
-																				num_epochs, cur_time//60, cur_time%60, epoch_train_loss, epoch_train_accuracy,
-																				epoch_val_loss, epoch_val_accuracy, average_accuracy, f1_macro, f1_micro))
-
-	# Return the measures that are used for selecting the best model state
-	selection_measures = {'epoch_f1_macro' : f1_macro, 'avg_acc' : avg_accuracy}
-
-	return selection_measures
-
-def get_optim_params(model, from_conv_layer):
-
-	if from_conv_layer:
-
-		# Per default, freeze all weights
+		# Per default, freeze all weights and unfreeze the FC layer
 		for parameter in model.parameters():
-			parameter.required_grad = False
+			parameter.requires_grad = False
 
-		# Unfreeze layer until 'from_conv_layer'
-		for i, (name, child) in enumerate(model.named_children):
+		for parameter in model.fc.parameters():
+			parameter.requires_grad = True
 
-			if i > from_conv_layer:
-				for name2, params in child.named_parameters():
-					params.required_grad = True
+		# Check to see if additional convolutional blocks should be unfrozen
+		if args.from_conv_layer:
 
-	else:
+			# Check if meteo model or not
+			if args.include_meteo:
+				for parameter in model.meteo_net.parameters():
+					parameter.requires_grad = True    
 
-		# Get the optimizer parameters. Only FC if from_conv_layer == False
-		optim_params = filter(lambda p: p.requires_grad, model.parameters())
+				for i, (name, child) in enumerate(model.resnet18_convblocks.named_children()):
+					if i + 1 > args.from_conv_layer:
+						for name2, params in child.named_parameters():
+							params.requires_grad = True
+
+			else:
+				# Unfreeze layer until 'from_conv_layer'
+				for i, (name, child) in enumerate(model.named_children()):
+
+					if i + 1 > args.from_conv_layer:
+						print(name)
+						for name2, params in child.named_parameters():
+							params.requires_grad = True
+
+	# Print number of countable parameters
+	model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+	params = sum([np.prod(p.size()) for p in model_parameters])
+	print('Number of weights that will be trained: {}'.format(params))
+
+	# Get the optimizer parameters
+	optim_params = filter(lambda p: p.requires_grad, model.parameters())
 
 	return optim_params
 
 def calculate_loss_weights(train_targets):
+	'''
+	Calculates weights for the loss function. Should be used when training the model by feeding it to
+	criterion.
+
+	:param train_targets: Numpy array containing the train targets.
+	'''
+
 	class_counts = np.bincount(train_targets.astype(int))
 	total = len(train_targets)
-	print(class_counts)
+
 	proportion_0 = class_counts[0] / total
 	proportion_1 = class_counts[1] / total
 	proportion_2 = class_counts[2] / total
 	proportions = [proportion_0, proportion_1, proportion_2]
 
-	print('Class percentages:\nNo fog: {:.2f}%\nFog: {:.2f}%\nDense fog: {:.2f}%'.format(proportion_0 * 100,
-																				  proportion_1 * 100, proportion_2 * 100))
-	print(class_counts)
+	# print('Class percentages:\nNo fog: {:.2f}%\nFog: {:.2f}%\nDense fog: {:.2f}%'.format(proportion_0 * 100,
+	# 																			  proportion_1 * 100, proportion_2 * 100))
+	# print(class_counts)
 
 	inverse_weights = 1 / torch.Tensor(proportions)
 
