@@ -2,11 +2,14 @@
 data/helpers/*
 data/semi-processed/*
 data/processed/*
+experiments/*
 
 # Keep the folders 
 !data/helpers/.gitkeep
 !data/semi-processed/.gitkeep
 !data/processed/.gitkeep 
+!experiments/.gitkeep
+
 
 # Don't keep cache
 __pycache__

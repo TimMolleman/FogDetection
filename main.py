@@ -1,8 +1,8 @@
 import argparse
 import numpy as np
 from torchvision import models
-from models.data_loader import *
-from models.model_loading import get_model
+from helpers.data_loader import *
+from models.model_utils import *
 from train.train_utils import *
 from train.test_utils import *
 
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 	test_dataset = FogDataset(test_data, custom_transforms['eval'])
 	test_loader = create_loader(test_dataset, 'test', args.batch_size)
 
-	test = test_model(trained_model, test_loader, args)
+	test = test_model(trained_model, train_loader, args)
 
 
 

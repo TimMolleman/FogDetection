@@ -1,6 +1,7 @@
-import train_utils
+import torch
 from torch import nn
 from torch.autograd import Variable
+from helpers.model_plotters import show_cm
 
 def test_model(model, dataloader, args):
     """
@@ -35,27 +36,9 @@ def test_model(model, dataloader, args):
     _, predictions = torch.max(outputs.data, 1) 
     correct = torch.sum(predictions == targets.data)  
     corrects = predictions == targets.data
-    
-    # plot_most_uncertain(outputs, corrects, predictions, loss, k=20)
-    
-#     for i, cor in enumerate(corrects):
-#         if predictions[i] == 1 and cor == 0:
-#             print(test_filepaths[i])
-#             print(test_targets[i])
-#             img = test_features[i]
-#             plt.imshow(img)
-#             plt.show()
-             
-    image_indices = list(range(0, total))
-#     plot_images(loss, image_indices, test_filepaths, targets, predictions, phase='test', amount=15)
-    
     test_accuracy = correct / total * 100
-    
-    print('Accuracy of model: {}'.format(test_accuracy)
-    
-    # show_cm(list(targets.data), list(predictions))
 
-# print('Confusion matrix test set f1 macro:')
-# test_model(model_f1, test_dataloader)
-# print('Confusion matrix test set average accuracy:')
-# test_model(model_avg, test_dataloader)
+    # Print results
+    print('Accuracy of {}: {}'.format(args.model_name, test_accuracy))
+    show_cm(list(targets.data), list(predictions))
+    

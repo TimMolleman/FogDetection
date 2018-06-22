@@ -270,10 +270,6 @@ def calculate_loss_weights(train_targets):
 	proportion_2 = class_counts[2] / total
 	proportions = [proportion_0, proportion_1, proportion_2]
 
-	# print('Class percentages:\nNo fog: {:.2f}%\nFog: {:.2f}%\nDense fog: {:.2f}%'.format(proportion_0 * 100,
-	# 																			  proportion_1 * 100, proportion_2 * 100))
-	# print(class_counts)
-
 	inverse_weights = 1 / torch.Tensor(proportions)
 
 	return inverse_weights
