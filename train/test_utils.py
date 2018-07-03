@@ -38,7 +38,6 @@ def test_model(model, dataloader, args):
     corrects = predictions == targets.data
     test_accuracy = correct / total * 100
 
-    # Print results
-    print('Accuracy of {}: {}'.format(args.model_name, test_accuracy))
+    # Print results and show the confusion matrix
+    print('Accuracy of {}: {:.2f}%'.format(args.model_name, test_accuracy))
     show_cm(list(targets.data), list(predictions))
-    

@@ -1,54 +1,132 @@
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import os
-import torch
-import torchvision
-import torchsample
 import psycopg2
-import random
 import re
-import time
 import csv
-import copy
+
 from functools import reduce 
 from datetime import datetime
-
-from torch.autograd import Variable
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.utils.data as data_utils
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
-from torch.utils.data.sampler import WeightedRandomSampler
-from torchvision import models
-from torchvision import transforms
-from torchsample import transforms as ts_transforms
-from matplotlib import pyplot as plt
 from PIL import Image
 from geopy.distance import vincenty 
 from scipy.ndimage import imread
-from sklearn.metrics import mean_squared_error
-from math import sqrt
 
-from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.metrics import r2_score
+KNMI_LOCATIONS = ['De Bilt (260_A_a)', 'Cabauw (348)', 'BEEK airport', 'EELDE airport', 'ROTTERDAM airport', 'SCHIPHOL airport']
 
-from mpl_toolkits.mplot3d import Axes3D
-from mlxtend.evaluate import confusion_matrix
-from mlxtend.plotting import plot_confusion_matrix
+def db_connect(config_path):
+	'''
+	Establishes connection to KNMI fog database.
+
+	:param config_path: filepath to configuration file for accessing the database
+	:return: cursor object that can be used to fetch data from database
+	'''
+
+	# Opens config file for connecting to database
+	with open(config_path, mode='r') as infile:
+		reader = csv.reader(infile)
+		config = {rows[0]:rows[1] for rows in reader}
+
+		# Credentials fo AWS database
+		dsn_database = config['database']
+		dsn_hostname = "fogdb.cmse2tqlcvsl.eu-west-1.rds.amazonaws.com"
+		dsn_port = "9418"
+		dsn_uid = config['\ufeffusername']
+		dsn_pwd = config ['password']
+
+		try:
+			conn_string = "host="+dsn_hostname+" port="+dsn_port+" dbname="+dsn_database+" user="+dsn_uid+" password="+dsn_pwd
+			print("Connected to database:\n{}\n".format(conn_string))
+			conn=psycopg2.connect(conn_string)
+		except:
+			print ("\nNo connection to the database could be established.")
+
+		cursor = conn.cursor()
+
+	# Return cursor object
+	return cursor
+
+def fetch_primary_dataframes(cursor, distance_filepath):
+	'''
+	Load the two primary dataframes.
+
+	:param cursor: cursor object obtained by running db_connect function
+	:param distance_filepath: filepath to csv containing distances between cameras and nearest meteorological stations
+	:return: 1. a dataframe containing cameras and their closest meteorological stations, 2. a dataframe containing
+	the meteorological variables and MOR visibility for every image
+	'''
+
+	# Distance to nearest meteo stations for all cameras
+	distance_df = pd.read_csv(distance_filepath)
+	print('Loaded the distance df\n')
+	# Get the images in dataframe
+	cursor.execute("SELECT * FROM images WHERE day_phase = '1'")
+	img_df = pd.DataFrame(cursor.fetchall(), columns=['img_id', 'camera_id', 'datetime', 'filepath', 'day_phase'])
+	img_df['filepath'] = img_df['filepath'].apply(adjust_filepath, 1)
+
+	print('Loaded images and adjusted filepaths\n')
+
+	# Fetch all the camera/location id pairs and put into df
+	cursor.execute("SELECT * FROM cameras")
+	df_cameras = pd.DataFrame(cursor.fetchall(), columns=['camera_id', 'location_id', 'cam_description', 'camera_name'])
+
+	print('Got cameras \n')
+
+	# Get the meteorological features
+	cursor.execute("SELECT * FROM meteo_features_copy")
+
+	df_meteo_features = pd.DataFrame(cursor.fetchall(), columns=['key','MeteoStationLocationID', 'datetime',
+																 'wind_speed', 'rel_humidity', 'air_temp', 'dew_point',
+																'mor_vis'])
+
+	print('Now merging image dataframe with the distance dataframe')
+
+	# Merge image df with the cameras df and then with distance df
+	merged_image_cameras = pd.merge(img_df, df_cameras, on='camera_id')
+	merged_nearest = pd.merge(merged_image_cameras, distance_df, on='location_id')
+
+	print('Succesfully fetched the primary dataframes\n')
+
+	return merged_nearest, df_meteo_features
+
+def create_main_df(df_meteo, merged_nearest_df, cursor):
+	'''
+	Creates the main dataframe from the two primary dataframes.
+
+	:param df_meteo: primary dataframe containing meteo variables and visibility labels for every image
+	:param merged_nearest_df: dataframe containing information on cameras and their closest meteorological stations
+	:param cursor: cursor object obtained by running db_connect function
+	:return: main dataframe
+	'''
+	# Load locations df
+	cursor.execute("SELECT * FROM locations")
+	locations_df = pd.DataFrame(cursor.fetchall(), columns=['location_id', 'location_name', 'long', 'lat'])
+
+	# Meteo features of closest meteo station are linked to every image
+	main_df = pd.merge(merged_nearest_df, df_meteo, on=['MeteoStationLocationID', 'datetime'])
+	main_df['visibility'] = main_df['mor_vis'].apply(ordinal_visibility, 1)
+
+	# Get locations for main_df rows
+	main_df = pd.merge(locations_df, main_df, on='location_id')
+
+	# Only keep meteorological variable values for cameras next to visibility sensors. Others will be filled with HARMONIE or IDW
+	main_df.loc[~main_df.location_name.isin(KNMI_LOCATIONS)), ['wind_speed', 'rel_humidity', 'air_temp', 'dew_point']] = np.nan
+
+	# Drop unnecessary columns
+	retain_columns = ['location_id', 'long', 'lat', 'location_name', 'camera_id', 'datetime', 'filepath', 'MeteoStationLocationID',
+					 'camera_name', 'meteo_station_id', 'meteo_station_name', 'distanceInMeters', 'wind_speed',
+					 'rel_humidity', 'air_temp', 'dew_point', 'mor_vis', 'visibility']
+	main_df = main_df[retain_columns]
+
+	print('Succesfully created the main dataframe\n')
+
+	return main_df
 
 def adjust_filepath(filepath):
 	'''
-	Used for getting the right filepaths to match the filepath structure in directory.
+	Used for getting the right filepaths to match the filepath structure in image directory.
 
-	:param filepath: Any filepath in fog database pandas dataframe.
+	:param filepath: any filepath in fog database pandas dataframe.
+	:return: right format for filepath to match directory filenames
 	'''
 
 	# Changes filepaths of non-highway images
@@ -60,18 +138,33 @@ def adjust_filepath(filepath):
 	regex2 = re.compile(r'[A]\d*-.*')
 	search2 = re.search(regex2, jpg_name)
 
-	# Only do this if filepath is highway. So not being None
+	# Only do this if filepath is highway. So not None
 	if search2 != None:
 		jpg_name = search2.group(0)
 		return str(jpg_name)
 
 	return jpg_name
 
+def change_cabauw_bilt_filepaths(filepath):
+	'''
+	Changes the filepaths of old de Bilt images and of Cabauw images.
+
+	:param filepath: either a de Bilt or Cabauw image filepath
+	:return: changed filepath
+	'''
+
+	if 'nobackup/users/' in filepath:
+		return filepath[-29:]
+	elif 'CABAUW' in filepath:
+		return filepath[7:]
+
 def add_missing_windspeed(filepath, df_meteo):
 	'''
 	Adds missing windspeed values for Schiphol, Rotterdam and Eelde airport.
 
-	:param filepath: Filepath to the helper file that contains missing windspeed values.
+	:param filepath: filepath to the helper file that contains missing windspeed values
+	:param df_meteo: dataframe with missing windspeed values for Schiphol, Rotterdam and Eelde airport
+	:returns: dataframe containing the filled missing windspeed values
 	'''
 
 	with open(filepath, 'r') as file:
@@ -80,9 +173,7 @@ def add_missing_windspeed(filepath, df_meteo):
 		csv_read = csv.reader(file)
 		next(csv_read)
 
-		c = 0
-
-		for row in csv_read:
+		for c, row in enumerate(csv_read):
 			if row[1] == '240_W_18Cm27':
 				location_name = 'SCHIPHOL airport'
 				meteo_id = 542
@@ -108,7 +199,6 @@ def add_missing_windspeed(filepath, df_meteo):
 
 			for idx in indices:
 				try:
-					c += 1
 					df_meteo.at[idx, 'wind_speed'] = row[2]
 				except:
 					print(location_name, d_time)
@@ -122,11 +212,12 @@ def add_missing_temp_hum(filepath, df_meteo):
 	'''
 	Adds the missing temperature and humidity values for Schiphol.
 
-	:param filepath: Filepath to helper file that contains missing temperature and humidity values.
+	:param filepath: filepath to helper file that contains missing temperature and relative humidity values
+	:param df_meteo: dataframe with missing temperature and humidity for Schiphol, Rotterdam and Eelde airport
+	:return: dataframe with filled missing temperature and relative humidity values
 	'''
 
 	with open(filepath, 'r') as file:
-		print('ey wollah')
 		# Skip header row
 		csv_read = csv.reader(file)
 		next(csv_read)
@@ -167,7 +258,8 @@ def ordinal_visibility(mor_vis):
 	'''
 	Changes the ratio variable of MOR-visibility to ordinal scale.
 
-	:param mor_vis: Ratio MOR-visibility value.
+	:param mor_vis: ratio MOR-visibility value
+	:return: ordinal visibility label
 	'''
 	if mor_vis > 1000:
 		return 0
@@ -176,43 +268,30 @@ def ordinal_visibility(mor_vis):
 	elif mor_vis >= 250 and mor_vis <= 1000:
 		return 1
 
-def db_connect(config_path):
+def drop_null_rows(main_df):
 	'''
-	Establish connection to fog database. Returns cursor object.
+	Drops rows in main dataframe that contain NaN values for visibility or meteorological variables.
 
-	:param config_path: Filepath to configuration file for the database.
+	:param main_df: main dataframe just before pickling
+	:return: main_df with rows containing NaN's excluded
 	'''
+	# Drop NaN's
+	main_df = main_df[main_df['visibility'].notnull()]
+	main_df = main_df[main_df['wind_speed'].notnull()]
+	main_df = main_df[main_df['rel_humidity'].notnull()]
+	main_df = main_df[main_df['dew_point'].notnull()]
+	main_df = main_df[main_df['air_temp'].notnull()]
 
+	return main_df
 
-	# Opens config file for connecting to database
-	with open(config_path, mode='r') as infile:
-		reader = csv.reader(infile)
-		config = {rows[0]:rows[1] for rows in reader}
-
-		# Credentials fo AWS database
-		dsn_database = config['database']
-		dsn_hostname = "fogdb.cmse2tqlcvsl.eu-west-1.rds.amazonaws.com"
-		dsn_port = "9418"
-		dsn_uid = config['\ufeffusername']
-		dsn_pwd = config ['password']
-
-		try:
-			conn_string = "host="+dsn_hostname+" port="+dsn_port+" dbname="+dsn_database+" user="+dsn_uid+" password="+dsn_pwd
-			print("Connected to database:\n{}\n".format(conn_string))
-			conn=psycopg2.connect(conn_string)
-		except:
-			print ("\nNo connection to the database could be established.")
-
-		cursor = conn.cursor()
-
-	# Return cursor object
-	return cursor
 
 def perform_IDW(IDW_df, main_df):
 	'''
-	Performs Inverse Distance Weighting.
+	Performs Inverse Distance Weighting interpolation.
 
-	:param df: Should be the main dataframe after
+	:param IDW_df: dataframe containing meteorological stations not in main dataframe that is used for interpolating main dataframe values
+	:param main_df: main dataframe
+	:return: main dataframe with filled meterological variable values
 	'''
 
 	print('Starting Inverse Distance Weighting')
@@ -225,19 +304,25 @@ def perform_IDW(IDW_df, main_df):
 	hyper_IDW = {'air_temp' : {'k' : 9, 'p' : 1.0}, 'dew_point' : {'k' : 5, 'p' : 1.5},
 				'rel_humidity' : {'k' : 8, 'p' : 1.0}, 'wind_speed' : {'k' : 14, 'p' : 1.0}}
 
+	# Loop over unique dates
 	for c, date in enumerate(unique_dates):
 
+		# IDW should be performed for each variable 
 		for variable in variable_list:
 
+			# Get the right dates and variable values from IDW_df to use for interpolation 
 			meteo_stations = IDW_df[IDW_df['datetime'] == date]
 			meteo_stations = meteo_stations[meteo_stations[variable].notnull()]
 
+			# Get lat/lons and variable vallues
 			x = meteo_stations[['lat', 'lon']].as_matrix()
 			y = meteo_stations[variable]
 
+			# Get the main dataframe rows for which IDW has to be applied
 			date_df = main_df[main_df['datetime'] == date]
 			date_df = date_df[date_df[variable].isnull()]
 
+			# Perform IDW fore very row in date_df
 			for idx, row in date_df.iterrows():
 
 				coords_camera = np.asarray(row[['lat', 'long']])
@@ -247,72 +332,16 @@ def perform_IDW(IDW_df, main_df):
 		if c % 1000 == 0:
 			print('Change for {} of the {} unique dates'.format(c, num_dates))
 
-def fetch_primary_dataframes(cursor, distance_filepath):
-	'''
-	This loads two primary dataframes. It returns 1. dataframe containing cameras and closest meteorological stations
-	2. dataframe containing the meteorological variables and MOR visibility per images.
-
-	:param cursor: Cursor object obtained by running db_connect function.
-	:param distance_filepath: Filepath to csv containing distance between cameras and nearest meteorological stations.
-	'''
-
-	# Distance to nearest meteo stations for all cameras
-	distance_df = pd.read_csv(distance_filepath)
-	print('Loaded the distance df\n')
-	# Get the images in dataframe
-	cursor.execute("SELECT * FROM images WHERE day_phase = '1'")
-	img_df = pd.DataFrame(cursor.fetchall(), columns=['img_id', 'camera_id', 'datetime', 'filepath', 'day_phase'])
-	img_df['filepath'] = img_df['filepath'].apply(adjust_filepath, 1)
-	print('Loaded images and adjusted filepaths\n')
-	# Fetch all the camera/location id pairs and put into df
-	cursor.execute("SELECT * FROM cameras")
-	df_cameras = pd.DataFrame(cursor.fetchall(), columns=['camera_id', 'location_id', 'cam_description', 'camera_name'])
-	print('Got cameras \n')
-	# Get the meteorological features
-	cursor.execute("SELECT * FROM meteo_features_copy")
-	df_meteo_features = pd.DataFrame(cursor.fetchall(), columns=['key','MeteoStationLocationID', 'datetime',
-																 'wind_speed', 'rel_humidity', 'air_temp', 'dew_point',
-																'mor_vis'])
-	print('beforemerge')
-	# Merge image df with the cameras df and then with distance df
-	merged_image_cameras = pd.merge(img_df, df_cameras, on='camera_id')
-	merged_nearest = pd.merge(merged_image_cameras, distance_df, on='location_id')
-
-	print('Succesfully fetched the primary dataframes\n')
-
-	return merged_nearest, df_meteo_features
-
-def create_main_df(df_meteo, merged_nearest, cursor):
-	'''
-	Creates the main dataframe from the two primary dataframes.
-
-	:param df_meteo: Primary dataframe containing.
-	'''
-	# Load locations df
-	cursor.execute("SELECT * FROM locations")
-	locations_df = pd.DataFrame(cursor.fetchall(), columns=['location_id', 'location_name', 'long', 'lat'])
-
-	# Meteo features of closest meteo station are linked to every image
-	main_df = pd.merge(merged_nearest, df_meteo, on=['MeteoStationLocationID', 'datetime'])
-	main_df['visibility'] = main_df['mor_vis'].apply(ordinal_visibility, 1)
-
-	# Make sure that meteo variables above 7500m distance are nan. We want to fill these using IDW
-	main_df.loc[main_df.distanceInMeters > 7500, ['wind_speed', 'rel_humidity', 'air_temp', 'dew_point']] = np.nan
-
-	main_df = pd.merge(locations_df, main_df, on='location_id')
-
-	# Drop unnecessary columns
-	retain_columns = ['location_id', 'long', 'lat', 'location_name', 'camera_id', 'datetime', 'filepath', 'MeteoStationLocationID',
-					 'camera_name', 'meteo_station_id', 'meteo_station_name', 'distanceInMeters', 'wind_speed',
-					 'rel_humidity', 'air_temp', 'dew_point', 'mor_vis', 'visibility']
-	main_df = main_df[retain_columns]
-
-	print('Succesfully created the main dataframe\n')
-
 	return main_df
 
 
 def retrieve_IDW_df(IDW_directory):
+	'''
+	Retrieves the IDW df used for IDW interpolation.
+
+	:param IDW_directory: directory with csv's that contain values for the variables that are interpolated using IDW
+	:return: dataframe containing values of meteorological variables for 30-something meteorological stations
+	'''
 
 	# Load dataframes that have the meteorological variables/stations in them
 	IDW_dew_df = pd.read_csv(IDW_directory + 'dewpoint.csv').dropna()
@@ -332,10 +361,17 @@ def retrieve_IDW_df(IDW_directory):
 
 	return IDW_final_df
 
-def link_IDW_locations(link_filepath, IDW_df):
+def link_IDW_locations(link_csv_filepath, IDW_df):
+	'''
+	Links the IDW_df's DS_CODE column with KISID column of dataframe used for linking lat/lons and location names to IDW df.
+
+	:param link_csv_filepath: filepath to CSV-file containing location information on KNMI meteorological stations
+	:param IDW_df: dataframe obtained by running 'retrieve_IDW_df'
+	:return: IDW_df with linked location information 
+	'''
 
 	# Load df that contains latitude/longitude information for stations in IDW_final_df
-	link_df = pd.read_csv(link_filepath, error_bad_lines=False, delimiter=';')
+	link_df = pd.read_csv(link_csv_filepath, error_bad_lines=False, delimiter=';')
 	link_df.rename(columns = {'KISID':'DS_CODE'}, inplace = True)
 	link_df['DS_CODE'] = link_df['DS_CODE'].apply(replace_DS, 1)
 
@@ -348,26 +384,15 @@ def link_IDW_locations(link_filepath, IDW_df):
 
 	return IDW_df
 
-def change_cabauw_bilt_paths(filepath):
-	'''
-	Changes the filepaths of old de Bilt images and of Cabauw images.
-
-	:param filepath: Either a de Bilt or Cabauw image filepath.
-	'''
-
-	if 'nobackup/users/' in filepath:
-		return filepath[-29:]
-	elif 'CABAUW' in filepath:
-		return filepath[7:]
-
-def IDW(coords_camera, coords_stations, y, p=2, k=3):
+def IDW(coords_camera, coords_stations, y, p=1, k=5):
     '''
     Interpolate meteorological variable value for a camera using inverse distance weighting.
     
-    :param coords_camera: Coordinates for camera to get interpolated meteo value for.
-    :param coords_stations: Array containing [k, [latitude, longitude]] of stations with known meteo values.
-    :param p: Hyperparameter that determines the decay of weight given to distant points (should be between 1 and 3).
-    :param k: Number of k nearest stations to coords_camera to use for estimating y.
+    :param coords_camera: coordinates for camera to get interpolated meteo value for
+    :param coords_stations: array containing [k, [latitude, longitude]] of stations with known meteo values
+    :param p: hyperparameter that determines the decay of weight given to distant points (should be between 1 and 3)
+    :param k: number of k nearest stations to coords_camera to use for estimating y
+    :return: interpolated value for a meteorological variable
     '''
 
    	# Determine distance from meteorological stations and select the k closest stations
@@ -390,7 +415,8 @@ def replace_DS(ds_code):
     Makes DS_CODE numerical to match the 'KISID' in the dataframe that links meteorological dataframe to 
     long/lat values.
     
-    :param ds_code: DS_CODE out of 
+    :param ds_code: DS_CODE of IDW_df row
+    :return: numerical DS_CODE
     '''
     
     try:
@@ -405,14 +431,202 @@ def change_date(date_string):
     '''
     Changes string date in the IDW df to a datetime object.
     
-    :param date_string: String date.
+    :param date_string: string date
+    :return: datetime object
     '''
     date_string = date_string[:15]
     if date_string[9:11] == '24':
         date_string = date_string[:9] + '00' + date_string[11:]
     
     date_time = datetime.strptime(date_string, '%Y%m%d_%H%M%S')
+
     return date_time
+
+def fill_harmonie(df):
+	'''
+	Fills missing meteorological values in a dataframe with HARMONIE model values.
+
+	:param df: either main dataframe or dataframe containing test data
+	:return: dataframe with filled meteorological values
+	'''
+
+    unique_dates = df['datetime'].unique()
+    num_dates = len(unique_dates)
+
+    for c, one_date in enumerate(unique_dates):
+
+        # Get df for unique date and extract date
+        date_df = df[df['datetime'] == one_date]
+
+        # Convert date to string for getting zipfile
+        t = pd.to_datetime(str(one_date)) 
+        timestring = t.strftime('%Y%m%d%H')
+
+        # Get the zipfile path and the right date for getting gribfile in ZIP
+        zip_path, zip_date, grib_hour, or_hour = get_zipfile_path(timestring)
+        
+        try:
+            grib = open_grib(zip_path, zip_date, grib_hour)
+            
+            # Obtain grid point positions and meteo variables
+            lats, lons, temps, rel_hums, windspeeds = get_meteo_grids(grib)
+
+            for idx, row in date_df.iterrows():
+
+                # Get the closest lat/lon index of grid
+                obs_lat, obs_lon = row['lat'], row['long']
+                closest_idx = get_latlon_idx(lats, lons, obs_lat, obs_lon)
+
+                # Get the variable values
+                temp, rel_hum, windspeed = temps.flat[closest_idx], rel_hums.flat[closest_idx], windspeeds.flat[closest_idx]
+                temp = float(temp) - 272.15
+
+                dew_point = calculate_dewpoint(rel_hum, temp)
+
+                if np.isnan(row['air_temp']):
+                    df.at[idx, 'air_temp'] = temp
+                if np.isnan(row['rel_humidity']):
+                    df.at[idx, 'rel_humidity'] = rel_hum
+                if np.isnan(row['wind_speed']):
+                    df.at[idx, 'wind_speed'] = windspeed
+                if np.isnan(row['dew_point']):
+                    df.at[idx, 'dew_point'] = dew_point
+
+        except:
+            print('Grib-file unavailable at index: {}, for date: {}'.format(c, timestring))
+            print(zip_path, zip_date)
+            print(timestring)
+            print(date_df['filepath'])
+            continue
+    
+    
+        if c % 500 == 0:
+            print('Iterated over {} of {} unique dates'.format(c, num_dates))
+    
+    return df
+
+def get_zipfile_path(date):
+	'''
+	Gets a filepath for opening a zipfile containing a number of HARMONIE model GRIB-files. 
+
+	:param date: date in string format used for opening right zipfile 
+	:return: path to zipfile, the date for zipfile and the right hour for opening GRIB-file
+	'''
+
+    original_hour = date[-2:]
+    
+    # Change hour to closest HARMONIE model forecast 
+    if int(original_hour) < 7:
+        hour = '00'
+    elif 6 < int(original_hour) < 13:
+        hour = '06'
+    elif 12 < int(original_hour) < 19:
+        hour = '12'
+    elif 18 < int(original_hour) < 24:
+        hour = '18'
+    
+    # Get difference between forecast and inputted hour
+    difference = int(original_hour) - int(hour)
+
+    if difference >= 10:
+        grib_hour = str(difference)
+    else:
+        grib_hour = '0{}'.format(str(difference))
+
+    # Part of path to be used for opening zipfile
+    zip_date = date[:-2]+hour
+    
+    # Get complete path to zipfile
+    zipfile_name = 'HARM_{}_P1.zip'.format(zip_date)
+    zip_path = '/Volumes/externe schijf/timWeatherModel/{}'.format(zipfile_name)
+    
+    return zip_path, zip_date, grib_hour
+
+def open_grib(zip_path, zip_date, grib_hour):
+	'''
+	Opens a zipfile after which the right HARMONIE model GRIB-file is extracted from the opened file.
+
+	:param zip_path: path to zipfile that contains needed GRIB-file
+	:param zip_date: date of the zipfile
+	:param grib_hour: hour that is used for opening the right GRIB-file
+	:return: GRIB-file
+	'''
+    
+    # Create temporary directory for storing the GRIB-files in the zipfile
+    tDir = tempfile.mkdtemp('Harmonies')
+    
+    with TemporaryDirectory() as tmp_dir:
+        
+        # Open zipfile and get grib filepath
+        archive = ZipFile(zip_path)
+
+        grib_name = 'HA36_P1_{}00_0{}00_GB'.format(zip_date, grib_hour)
+
+        # Extract right grib file from zip and bring to temporary directory
+        extract_zip = archive.extract(grib_name, tmp_dir)
+        gribfile = pygrib.open('{}/{}'.format(tmp_dir, grib_name))
+        
+    return gribfile
+
+def get_latlon_idx(lats, lons, obs_lat, obs_lon):
+	'''
+	Gets index of HARMONIE grid-point that a camera in main dataframe row is closest to.
+
+	:param lats: 300x300 grid containing latitudes
+	:param lons: 300x300 gird containing longitudes
+	:param obs_lat: observed latitude for a row in main dataframe
+	:param obs_lon: observed longitude for a row in main dataframe
+	:return: index of closest grid-point
+	'''
+
+    # Get the absolute distances between all grid points and observation point
+    abslat = np.abs(lats - obs_lat)
+    abslon = np.abs(lons - obs_lon)
+
+    # Get the absolute distance between camera and every grid-point
+    lat_index = np.argmin(abslat)
+    lon_index = np.argmin(abslon)
+
+    # Get closest grid-point
+    c = np.maximum(abslon, abslat)
+    latlon_idx = np.argmin(c)
+    
+    return latlon_idx
+
+def calculate_dewpoint(RH, T):
+    '''
+    Calculates dewpoint given relative humidity and temperature.
+
+    :param RH: relative humidity
+    :param T: temperature
+    :return: dewpoint value
+
+    '''
+    RH = RH * 100
+    DP = 243.04*(np.log(RH/100)+((17.625*T)/(243.04+T)))/(17.625-np.log(RH/100)-((17.625*T)/(243.04+T))) + 0.08
+    return DP
+
+def get_meteo_grids(grib):
+	'''
+	Gets
+	'''
+
+    # Get variable values for date
+    temps = grib.select(name='2 metre temperature')[0]
+    rel_hums = grib.select(name='Relative humidity')[0]
+    
+    # Calculate the wind speed
+    windcomponent_U = grib.select(name='10 metre U wind component')[0].values
+    windcomponent_V = grib.select(name='10 metre V wind component')[0].values
+    windspeeds = np.sqrt(windcomponent_U ** 2 + windcomponent_V **2)
+
+    # Latitudes and longitudes are the same for every variable, because same grid is used
+    lats, lons = temps.latlons()
+
+    temps, rel_hums = temps.values, rel_hums.values
+    
+    return lats, lons, temps, rel_hums, windspeeds
+
 
 def main():
 
@@ -443,14 +657,9 @@ def main():
 	# Interpolate meteorological NaN values using inverse distance weighting
 	main_df = perform_IDW(IDW_df, main_df)
 
-	main_df['filepath'] = main_df['filepath'].apply(change_cabauw_bilt_paths, 1)
-
-	# Exclude NaN's
-	main_df = main_df[main_df['visibility'].notnull()]
-	main_df = main_df[main_df['wind_speed'].notnull()]
-	main_df = main_df[main_df['rel_humidity'].notnull()]
-	main_df = main_df[main_df['dew_point'].notnull()]
-	main_df = main_df[main_df['air_temp'].notnull()]
+	# Change de Bilt/Cabauw filepaths and drop NaN rows 
+	main_df['filepath'] = main_df['filepath'].apply(change_cabauw_bilt_filepaths, 1)
+	main_df = drop_null_rows(main_df)
 
 	# Pickle dataframe
 	main_df.to_pickle('semi-processed/test_df')

@@ -6,7 +6,7 @@ from models.model_utils import *
 from train.train_utils import *
 from train.test_utils import *
 
-parser = argparse.ArgumentParser(description='Pytorch ML')
+parser = argparse.ArgumentParser(description='Fog Detection ML ')
 # Learning
 parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate [default: 0.0001]')
 parser.add_argument('--epochs', type=int, default=2, help='default number of epochs for the training [default 2]')
@@ -23,6 +23,7 @@ parser.add_argument('--meteo_outputs', type=int, default=16, help='number of out
 #Device
 parser.add_argument('--cuda', action='store_true', default=False, help='enable the gpu')
 parser.add_argument('--save_path', type=str, default="models/trained.pth.tar", help='Path where to dump model')
+
 # Directory/file locations model saving
 parser.add_argument('--train_data_path', type=str, default="data/processed/highway_train.npy", help='location of training numpy dictionary')
 parser.add_argument('--val_data_path', type=str, default="data/processed/highway_val.npy", help='location of validation numpy array dictionary')

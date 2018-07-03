@@ -5,9 +5,10 @@ import torch.nn as nn
 
 def get_model(args):
     '''
-    Retrieve the right model to pass to 'train_model' function. 
+    Retrieve model to for training. 
 
-    :param args: Parser arguments
+    :param args: parser arguments
+    :returns: model specified in args.model_name
     '''
 
     if args.model_name == 'resnet18':
@@ -35,7 +36,6 @@ def get_model(args):
         resnet_model = torchvision.models.resnet18(pretrained=True)
         resnet_model.avgpool = nn.AdaptiveAvgPool2d(1)
         meteo_NN = meteo_NN(args.meteo_inputs, args.meteo_hidden_size, args.meteo_outputs)
-
         model = resnet18_meteo(resnet_model, meteo_NN, args.num_classes)
         
 

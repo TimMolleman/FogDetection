@@ -14,10 +14,9 @@ def df_to_numpy_train(df, dataset_name):
 	'''
 	Transforms training dataframes to numpy arrays. 
 
-	Returns: four numpy arrays containing images, targets, filepaths and meteorological variables.
-
-	:param df: Highway train dataframe or KNMI dataframe.
-	:param dataset_name: Either 'highway' or 'KNMI', depending on first argument.
+	:param df: highway train dataframe or KNMI dataframe
+	:param dataset_name: either 'highway' or 'KNMI', depending on dataframe in first argument
+	:returns: four numpy arrays containing the images, targets, filepaths and meteorological variables
 	'''
 
 	image_list, target_list, filepath_list, meteo_list = [], [], [], []
@@ -72,11 +71,12 @@ def df_to_numpy_train(df, dataset_name):
 
 def df_to_test_dict(main_df, test_dir, filename_test):
 	'''
-	Loads the testing data to a dict of numpy arrays.
+	Loads the testing data to a dictionary of numpy arrays (images, targets, filepaths, meteorological variables).
 
-	:param df: Main dataframe.
-	:param test_dir: Test directory location.
+	:param main_df: a main dataframe 
+	:param test_dir: test directory location
 	:param filename_test: Filename for the test array.
+	:returns: dictionary containing the four numpy arrays
 	'''
 
 	# Used for storing filename:label pairs
@@ -84,7 +84,7 @@ def df_to_test_dict(main_df, test_dir, filename_test):
 
 	# This opens all labeled files and finds the corresponding pictures and labels
 	with open(test_dir + filename_test) as filestream:
-	    c = 0
+	
 	    for row in filestream:
 	        row = row.strip().split(',')
 	        filename = row[0]
@@ -93,29 +93,33 @@ def df_to_test_dict(main_df, test_dir, filename_test):
 	        datapoint_df = main_df[main_df['filepath'] == filename]
 	        meteo = datapoint_df[['wind_speed', 'rel_humidity', 'air_temp', 'dew_point']]
 
-	#         if len(np.asarray(meteo)) > 0:
+	        if len(np.asarray(meteo)) > 0:
 	    
-	        # Regex necessary elements
-	        highway = re.search(r'A\d*', filename).group(0)
-	        ID = re.search(r'ID\d*', filename).group(0)
-	        HM = re.search(r'HM\d*', filename).group(0)
-	        year_month = re.search(r'_\d*_', filename).group(0)[1:7]
+		        # Regex necessary elements
+		        highway = re.search(r'A\d*', filename).group(0)
+		        ID = re.search(r'ID\d*', filename).group(0)
+		        HM = re.search(r'HM\d*', filename).group(0)
+		        year_month = re.search(r'_\d*_', filename).group(0)[1:7]
 
-	        path = '{}{}/{}/{}/{}/{}'.format(test_dir, highway, HM, ID, year_month, filename)
+		        path = '{}{}/{}/{}/{}/{}'.format(test_dir, highway, HM, ID, year_month, filename)
 
-	        img = Image.open(path)
-	        img = img.resize((IMG_SIZE, IMG_SIZE))
-	        image_list_test.append(np.asarray(img))
-	        target_list_test.append(np.asarray(label))
-	        filepath_list_test.append(np.asarray(path))
-	        meteo_list_test.append(np.asarray(meteo))
+		        # Get all variables, labels and filepaths for image
+		        img = Image.open(path)
+		        img = img.resize((IMG_SIZE, IMG_SIZE))
+		        image_list_test.append(np.asarray(img))
+		        target_list_test.append(np.asarray(label))
+		        filepath_list_test.append(np.asarray(path))
+		        meteo_list_test.append(np.asarray(meteo))
 
-	        img.close()
+		        img.close()
+
+	        else:
+	        	print('Couldn\'t find meteorological variables for {}'.format(filename))
             
 	# Transform lists to arrays and then put them in dictionary 
 	test_features, test_targets = np.asarray(image_list_test), np.asarray(target_list_test)
 	test_filepaths, test_meteo = np.asarray(filepath_list_test), np.asarray(meteo_list_test)
-	print(type(test_meteo))
+	test_meteo = test_meteo.reshape(len(test_meteo), 4)
 	test_dict = {'images': test_features, 'targets': test_targets, 'filepaths': test_filepaths, 'meteo': test_meteo}
 
 	return test_dict
@@ -297,7 +301,7 @@ def standardize_meteo(meteo_np):
 
 	return standardized_meteo
 
-def main():
+def process_raw():
 
 	# Necessary dirs and paths to files
 	PROCESSED_DIR = 'processed/'
@@ -358,9 +362,8 @@ def main():
 	np.save(PROCESSED_DIR + 'highway_val.npy', highway_val_dict)
 	np.save(PROCESSED_DIR + 'test.npy', test_dict)
 
-	print('Done! Processed the data into numpy dictionaries.')
+	print('Done! Processed the data to a dictionary of numpy arrays.')
 
-if __name__== '__main__':
-	main()
+process_raw
 
 
