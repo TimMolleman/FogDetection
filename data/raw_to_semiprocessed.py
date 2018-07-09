@@ -31,7 +31,7 @@ parser.add_argument('--test_images_path', type=str, default='/Volumes/TIMKNMI/KN
 parser.add_argument('--semi_processed_dir', type=str, default='semi-processed/', help='directory to which to save dataframes')
 
 # Meteo-filling method
-parser.add_argument('--missing_meteo_method', type=str, default='harmonie', help='method for filling missing meteo variables. Either IDW or harmonie')
+parser.add_argument('--missing_meteo_method', type=str, default='IDW', help='method for filling missing meteo variables. Either IDW or harmonie')
 
 # New dataframe
 parser.add_argument('--new_main_df', type=bool, default=True, help='decide if new main dataframe should be created')
@@ -85,7 +85,8 @@ def fetch_primary_dataframes(cursor, distance_filepath):
 
 	# Distance to nearest meteo stations for all cameras
 	distance_df = pd.read_csv(distance_filepath)
-	print('Loaded the distance df')
+	print('Loaded the distance dataframe')
+	
 	# Get the images in dataframe
 	cursor.execute("SELECT * FROM images WHERE day_phase = '1'")
 	img_df = pd.DataFrame(cursor.fetchall(), columns=['img_id', 'camera_id', 'datetime', 'filepath', 'day_phase'])
@@ -97,7 +98,7 @@ def fetch_primary_dataframes(cursor, distance_filepath):
 	cursor.execute("SELECT * FROM cameras")
 	df_cameras = pd.DataFrame(cursor.fetchall(), columns=['camera_id', 'location_id', 'cam_description', 'camera_name'])
 
-	print('Got cameras \n')
+	print('Got cameras dataframe')
 
 	# Get the meteorological features
 	cursor.execute("SELECT * FROM meteo_features_copy")
@@ -185,6 +186,8 @@ def change_cabauw_bilt_filepaths(filepath):
 		return filepath[-29:]
 	elif 'CABAUW' in filepath:
 		return filepath[7:]
+	else:
+		return filepath
 
 def add_missing_windspeed(filepath, df_meteo):
 	'''
@@ -219,7 +222,7 @@ def add_missing_windspeed(filepath, df_meteo):
 			if date[8:10] == '24':
 				date = date[:8] + '00' + date[10:]
 
-			d_time = datetime.strptime(date, '%Y%m%d%H%M%S')
+			d_time = dt.strptime(date, '%Y%m%d%H%M%S')
 
 			# Get dataframe rows that match the specific datetime and location
 			indices = df_meteo[(df_meteo['datetime'] == d_time) &
@@ -263,7 +266,7 @@ def add_missing_temp_hum(filepath, df_meteo):
 			if date[8:10] == '24':
 				date = date[:8] + '00' + date[10:]
 
-			d_time = datetime.strptime(date, '%Y%m%d%H%M%S')
+			d_time = dt.strptime(date, '%Y%m%d%H%M%S')
 
 			# Get dataframe rows that match the specific datetime and location
 			indices = df_meteo[(df_meteo['datetime'] == d_time) &
@@ -466,7 +469,7 @@ def change_date(date_string):
 	if date_string[9:11] == '24':
 		date_string = date_string[:9] + '00' + date_string[11:]
 	
-	date_time = datetime.strptime(date_string, '%Y%m%d_%H%M%S')
+	date_time = dt.strptime(date_string, '%Y%m%d_%H%M%S')
 
 	return date_time
 
@@ -685,6 +688,7 @@ def get_test_df(test_filepath, merged_nearest, locations_df):
 			filename = row[0]
 			test_filenames.append(filename)
 
+	print(len(test_filenames))
 	# Obtain test df without the meteo values filled
 	test_loc_df = pd.merge(merged_nearest, locations_df, on='location_id')
 	test_loc_df = test_loc_df[test_loc_df['filepath'].isin(test_filenames)]  
@@ -700,40 +704,42 @@ def main():
 
 	# Get the primary dataframes
 	merged_nearest_df, df_meteo_features = fetch_primary_dataframes(cursor, args.distance_path)
+
 	# # Add missing meterological variables to the meteo dataframe
-	# df_meteo_features = add_missing_windspeed(args.windspeed_path, df_meteo_features)
-	# df_meteo_features = add_missing_temp_hum(args.temperature_humidity_path, df_meteo_features)
+	df_meteo_features = add_missing_windspeed(args.windspeed_path, df_meteo_features)
+	df_meteo_features = add_missing_temp_hum(args.temperature_humidity_path, df_meteo_features)
 
 	# # Create main dataframe
 	main_df, locations_df = create_main_df(df_meteo_features, merged_nearest_df, cursor)
 
 	# main_df = pd.read_pickle('semi-processed/before_filling_meteo')
 	main_df = main_df[:1000]
-
-	# # Fill missing meteo values 
-	# if args.missing_meteo_method == 'IDW':
+	print('first info')
+	print(main_df.info())
+	# Fill missing meteo values 
+	if args.missing_meteo_method == 'IDW':
 		
-	# 	# Get the dataframe used for Inverse Distance Weighting and map locations to it
-	# 	IDW_df = retrieve_IDW_df(args.IDW_dfs_path)
-	# 	IDW_df = link_IDW_locations(args.linking_path, IDW_df)
+		# Get the dataframe used for Inverse Distance Weighting and map locations to it
+		IDW_df = retrieve_IDW_df(args.IDW_dfs_path)
+		IDW_df = link_IDW_locations(args.linking_path, IDW_df)
 
-	# 	# Interpolate meteorological NaN values using inverse distance weighting
-	# 	main_df = perform_IDW(IDW_df, main_df)
+		# Interpolate meteorological NaN values using inverse distance weighting
+		main_df = perform_IDW(IDW_df, main_df)
 
-	# elif args.missing_meteo_method == 'harmonie':
-	# 	main_df = fill_harmonie(main_df)
+	elif args.missing_meteo_method == 'harmonie':
+		main_df = fill_harmonie(main_df)
 
-	# else:
-	# 	raise ValueError("Specify either 'IDW' or 'harmonie' for missing_meteo_method") 
+	else:
+		raise ValueError("Specify either 'IDW' or 'harmonie' for missing_meteo_method") 
 
-	# # Change de Bilt/Cabauw filepaths and drop NaN rows 
-	# main_df['filepath'] = main_df['filepath'].apply(change_cabauw_bilt_filepaths, 1)
-	# main_df = drop_null_rows(main_df)
+	# Change de Bilt/Cabauw filepaths and drop NaN rows 
+	main_df['filepath'] = main_df['filepath'].apply(change_cabauw_bilt_filepaths, 1)
+	main_df = drop_null_rows(main_df)
 
-	# # Pickle main dataframe
-	# if args.new_main_df:
-	# 	main_df.to_pickle('{}/main_dataframe_{}'.format(args.semi_processed_dir, args.missing_meteo_method))
-	# 	print('Saved main dataframe')
+	# Pickle main dataframe
+	if args.new_main_df:
+		main_df.to_pickle('{}/main_dataframe_{}'.format(args.semi_processed_dir, args.missing_meteo_method))
+		print('Saved main dataframe')
 
 	# Get test dataframe
 	test_df_nometeo = get_test_df(args.test_images_path , merged_nearest_df, locations_df)

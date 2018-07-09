@@ -13,9 +13,10 @@ def train_model(model, data_loaders, weights, args):
 	'''
 	Main function used for training the networks.
 
-	:param model: Model to train
-	:param data_loaders: Dictionary containing train dataloader and validation dataloader
-	:param weights: Weights for the weighting of loss. Passed to criterion
+	:param model: model to train
+	:param data_loaders: dictionary containing train dataloader and validation dataloader
+	:param weights: weights for the weighted crossentropy
+	:return: checkpoint of the last epoch
 	'''
 
 	print('Start training of {} model:\n'.format(args.model_name))
@@ -57,7 +58,11 @@ def train_model(model, data_loaders, weights, args):
 
 def create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train, epoch_loss_val):
 	'''
-	Adjusts the checkpoint dictionary after each epoch. Returns this adjusted dictionary. 
+	Update the checkpoint dictionary after each epoch. Returns the updated dictionary. 
+
+	:param checkpoint_dict: current checkpoint dictionary
+	:param model: model object
+	:param measures: F1
 
 	'''
 	# Update variables if the model state is better than previous model states 
@@ -171,10 +176,11 @@ def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 
 def get_average_accuracy(predictions, targets):
 	'''
-	Calculate the average accuracy for an epoch.
+	Calculate the average accuracy for epoch predictions and targets.
 
-	:param predictions: Numpy array containing predictions of model training epoch.
-	:param targets: Numpy array containing targets of model training epoch.
+	:param predictions: numpy array containing predictions of model training epoch
+	:param targets: numpy array containing targets of model training epoch
+	:return: epoch average accuracy
 	'''
   
 	# Lists for holding corrects
@@ -209,8 +215,9 @@ def get_optim_params(model, args):
 	'''
 	Retrieve the weights that have to be optimized.
 
-	:param model: Model class to be trained
-	:param args: Parser arguments
+	:param model: model class to be trained
+	:param args: parser arguments
+	:return: parameters that require optimization
 	'''
 
 	if args.model_name != 'shallow_CNN':
@@ -259,7 +266,8 @@ def calculate_loss_weights(train_targets):
 	Calculates weights for the loss function. Should be used when training the model by feeding it to
 	criterion.
 
-	:param train_targets: Numpy array containing the train targets.
+	:param train_targets: numpy array containing the train targets
+	:return: array of loss weights
 	'''
 
 	class_counts = np.bincount(train_targets.astype(int))

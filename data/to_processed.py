@@ -15,9 +15,13 @@ parser.add_argument('--test_image_dir', type=str, default='/Volumes/TIMKNMI/KNMI
 parser.add_argument('--knmi_relabel_path', type=str, default='helpers/knmichangelabels', help='path to file containing new labels for knmi images')
 parser.add_argument('--highway_relabel_path', type=str, default='helpers/trainhighwaylabels', help='path to file containing new labels for highway images')
 parser.add_argument('--highway_ommit_path', type=str, default='helpers/ommitancehighway', help='path to file with highway images to be removed')
-parser.add_argument('--test_image_file', type=str, default='TestImagesRefined', help='path to file with highway images to be removed')
+parser.add_argument('--test_image_filename', type=str, default='TestImagesRefined.txt', help='path to file with highway images to be removed')
 parser.add_argument('--semi_processed_dir', type=str, default='semi-processed', help='path to directory where dataframes are stored')
-parser.add_argument('--dataframe', type=str, default='main_dataframe_harmonie', help='filename of main dataframe')
+parser.add_argument('--main_dataframe', type=str, default='main_dataframe_harmonie', help='filename of main dataframe')
+parser.add_argument('--test_dataframe', type=str, default='test_df_harmonie', help='filename of test dataframe')
+
+# Standardize
+parser.add_argument('--standardize_meteo', type=bool, default=False, help='decides if meteo variables should be standardized [default: False]')
 
 args = parser.parse_args()
 
@@ -40,7 +44,6 @@ def df_to_numpy_train(df, dataset_name):
 
 	# Loop over passed dataframe
 	for c, (index, row) in enumerate(df.iterrows()):
-
 		# Get necessary information
 		camera = row['camera_name']
 		year_month = row['datetime'].strftime("%Y%m")  
@@ -86,13 +89,13 @@ def df_to_numpy_train(df, dataset_name):
 
 	return np.asarray(image_list), np.asarray(target_list), np.asarray(filepath_list), np.asarray(meteo_list)
 
-def df_to_test_dict(main_df, test_dir, filename_test):
+def df_to_test_dict(test_df, test_dir, filename_test):
 	'''
 	Loads the testing data to a dictionary of numpy arrays (images, targets, filepaths, meteorological variables).
 
-	:param main_df: a main dataframe 
+	:param test_df: test dataframe
 	:param test_dir: test directory location
-	:param filename_test: filename for the test array
+	:param filename_test: filename for the test txt file
 	:return: dictionary containing the four numpy arrays
 	'''
 
@@ -107,7 +110,7 @@ def df_to_test_dict(main_df, test_dir, filename_test):
 	        filename = row[0]
 	        label = row[1]
 	        
-	        datapoint_df = main_df[main_df['filepath'] == filename]
+	        datapoint_df = test_df[test_df['filepath'] == filename]
 	        meteo = datapoint_df[['wind_speed', 'rel_humidity', 'air_temp', 'dew_point']]
 
 	        if len(np.asarray(meteo)) > 0:
@@ -221,26 +224,6 @@ def ommit_labels_highway(highway_images, highway_targets, highway_filepaths, hig
 
 	return highway_targets, highway_images, highway_filepaths, highway_meteo
 
-def standardize_meteo(meteo_numpy):
-	'''
-	Standardizes meteorological variables. Centers values with mean 0 and standard deviation 1.
-	Done independently for every variables.
-
-	:param meteo_numpy: numpy array containing meteorological variables
-	:return: standardized meteorological variables numpy array of same shape as input array.
-	'''
-	# Put numpy array into dataframe and drop rows containing NaNs
-	standardize_df = pd.DataFrame(meteo_numpy, columns=[0, 1, 2, 3])
-	standardize_df = standardize_df.dropna(axis=0)
-
-	# Scale data with mean centered around 0 and standard deviation 1
-	std_scale = preprocessing.StandardScaler().fit(standardize_df[[0, 1, 2, 3]])
-	highway_meteo = std_scale.transform(standardize_df[[0, 1, 2, 3]])
-
-	print('Standardized meteorological variables')
-
-	return highway_meteo
-
 def create_highway_df(main_df):
 	'''
 	Get all the highways camera's that are closest to Schiphol and Eelde airport.
@@ -261,7 +244,7 @@ def create_highway_df(main_df):
 
 	return highway_df
 
-def split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo):
+def split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, std_meteo):
 	'''
 	Splits the labeled highway dataset into two separate datasets: Train dataset and validation set.
 	5 camera's are used for validation set. Other camera's are used for training.
@@ -270,13 +253,15 @@ def split_highway(highway_images, highway_targets, highway_filepaths, highway_me
 	:param highway_images: numpy array with target images
 	:param highway_filepaths: numpy array with the filepathss
 	:param highway_meteo: numpy array with the meteorological variables
+	:param std_meteo: if True, values for meteorological variables are standardized
 	:return: two dictionaries 1) contains train highway arrays 2) contains validation highway arrays
 	'''
 
-	# Before splitting, normalize meteo variables over the whole dataset
-	highway_meteo = standardize_meteo(highway_meteo)
+	# Normalize meteo variables over the whole dataset
+	if std_meteo:
+		highway_meteo = standardize_meteo(highway_meteo)
 
-	# List of camera's to use as validation set
+	# List of cameras to use as validation set
 	camera_list = ['A28/HM1893', 'A4/HM103', 'A5/HM86', 'A9/HM302', 'A28/HM1966']
 
 	# Get validation numpy arrays
@@ -315,7 +300,9 @@ def standardize_meteo(meteo_np):
 def main():
 
 	# Read the semi-processed data
-	main_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.dataframe))
+	main_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.main_dataframe))
+	test_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.test_dataframe))
+	# print(main_df.info())
 
 	# Get KNMI df and highway df
 	KNMI_df = main_df[main_df['location_name'].isin(KNMI_NAMES)][:500]
@@ -325,15 +312,15 @@ def main():
 	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = df_to_numpy_train(KNMI_df, 'KNMI')
 	highway_images, highway_targets, highway_filepaths, highway_meteo = df_to_numpy_train(highway_df, 'highway')
 
-	highway_images = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_images.npy')
-	highway_targets = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_targets.npy')
-	highway_filepaths = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_filepaths.npy')
-	highway_meteo = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_meteo.npy')
+	# highway_images = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_images.npy')
+	# highway_targets = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_targets.npy')
+	# highway_filepaths = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_filepaths.npy')
+	# highway_meteo = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_meteo.npy')
 
-	highway_images = highway_images[:10000]
-	highway_targets = highway_targets[:10000]
-	highway_filepaths = highway_filepaths[:10000]
-	highway_meteo = highway_meteo[:10000]
+	# highway_images = highway_images[:10000]
+	# highway_targets = highway_targets[:10000]
+	# highway_filepaths = highway_filepaths[:10000]
+	# highway_meteo = highway_meteo[:10000]
 
 	print(np.bincount(KNMI_targets.astype(int)))
 	print(np.bincount(highway_targets.astype(int)))
@@ -350,13 +337,13 @@ def main():
 	# highway_images, highway_targets, highway_filepaths, highway_meteo = ommit_labels_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.highway_ommit_path)
 
 	# Split the highway dataset into training and validation
-	highway_train_dict, highway_val_dict = split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo)
+	highway_train_dict, highway_val_dict = split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.standardize_meteo)
 
 	# Create KNMI dict
 	KNMI_dict = {'images': KNMI_images, 'targets': KNMI_targets, 'filepaths': KNMI_filepaths, 'meteo': KNMI_meteo}
 
 	# Load the test dictionaries
-	test_dict = df_to_test_dict(main_df, args.test_image_dir, args.test_image_filename)
+	test_dict = df_to_test_dict(test_df, args.test_image_dir, args.test_image_filename)
 
 	# Save the arrays into numpy dictionaries
 	np.save(args.processed_dir + 'KNMI.npy', KNMI_dict)

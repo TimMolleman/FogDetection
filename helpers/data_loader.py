@@ -19,10 +19,6 @@ custom_transforms = {
 }
 
 class FogDataset(Dataset):
-    '''
-    Custom dataset class used for creating the KNMI/highway datasets.
-
-    '''
     def __init__(self, data_dict, transforms=None):
 
         self.transforms = transforms
@@ -47,14 +43,14 @@ class FogDataset(Dataset):
         return len(self.targets)
 
 def create_loader(dataset, type, batch_size):
-    """
+    '''
     Fetches the DataLoader object for each type in types from data_dir.
-    Args:
-        types: (list) has one or more of 'train', 'val', 'test' depending on which data is required
-        data_dir: (string) directory containing the dataset
-    Returns:
-        data: (dict) contains the DataLoader object for each type in types
-    """
+
+    :param dataset: numpy dict containing the data arrays
+    :param type: type of dataset [train, validation or test]
+    :param batch_size: mini-batch size to use in experiment
+    :return: dataloader object
+    '''
 
     if type == 'train':
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -62,5 +58,8 @@ def create_loader(dataset, type, batch_size):
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     elif type == 'test':
         dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
+    else:
+        raise ValueError("Specify either 'train', 'validation' or 'test' to create dataloader, not '{}'".format(type)) 
+
 
     return dataloader
