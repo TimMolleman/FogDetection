@@ -7,15 +7,15 @@ from sklearn.decomposition import PCA
 # Globals (adjust to your own purposes)
 IMG_SIZE = 100
 CHANNELS = 3
-PLOT_DIR = '../figures/'
+PLOT_DIR = '../img/plotss'
 
 
 def distribution_meteo_variables(df, filepath):
     '''
-    Plots the distribution of weather variables at the KNMI weather stations. No interpolated/harmonie variables are used.
+    Plots the distribution of weather variables at the KNMI weather stations. No IDW/harmonie variables are used.
 
-    :param df: Either main dataframe or KNMI weather stations dataframe
-    :param filepath: Location to store distribution image
+    :param df: either main dataframe or KNMI weather stations dataframe
+    :param filepath: location to store distribution image
     '''
 
     # Selection lists with right criteria for plotting the meteo variables
@@ -45,27 +45,17 @@ def distribution_meteo_variables(df, filepath):
         # Plot
         sns.distplot(target_0[variable], hist=False, kde=True, kde_kws = {'linewidth':3, 'clip': clip[variable], 'shade':True}, label='no fog')
         sns.distplot(target_1[variable], hist=False, kde=True, kde_kws = {'linewidth':3,'clip': clip[variable], 'shade':True}, label='light fog')
-        sns.distplot(target_2[variable], hist=False, kde=True, kde_kws = {'linewidth':3,'clip': clip[variable], 'shade':True},label='dense fog')
+        sns.distplot(target_2[variable], hist=False, kde=True, kde_kws = {'linewidth':3,'clip': clip[variable], 'shade':True}, label='dense fog')
     
     fig.savefig(filepath)
 
-
-
-def save_PCAfig(X_data, y_data, filepath):
-    '''
-    This plots a PCA dataframe created with the run_PCA function
-    
-    :param X_data: Pixel values of images
-    :param y_data: Corresponding target values of images
-    :param filepath: Location to store PCA image  
-    '''
-
-    def run_PCA(X_data, y_data):
+def run_PCA(X_data, y_data):
         '''
         Gets 2-dimensional principal components for pixel data
         
-        :param X_data: Pixel values of images
-        :param y_data: Corresponding target values of images
+        :param X_data: pixel values of images
+        :param y_data: corresponding target values of images
+        :return: dataframe for performing PCA analysis
         '''
         
         # Define and transform data
@@ -78,6 +68,15 @@ def save_PCAfig(X_data, y_data, filepath):
         PCA_df = pd.concat([PCA_df, target_df['target']], axis=1)
         
         return PCA_df
+
+def save_PCAfig(X_data, y_data, filepath):
+    '''
+    This saves a plot of a dataframe created with the run_PCA function
+    
+    :param X_data: pixel values of images
+    :param y_data: corresponding target values of images
+    :param filepath: location to store PCA image  
+    '''
 
     # Get the PCA data
     PCA_df = run_PCA(X_data, y_data)
@@ -106,8 +105,8 @@ def save_PCAfig(X_data, y_data, filepath):
 
 '''
 Below are two examples. First one for plotting 'distribution_meteo_variables' and second one for
-plotting PCA function. Uncomment and run and figure will show up in your figures folder. Note that for
-performing the PCA, it is recommended to use a subset of the no-fog images. Otherwise it will overflow memory.
+plotting PCA function. Uncomment and run and figure will show up in the figures folder. Note that for
+performing the PCA, it is recommended to use a subset of the no-fog images. Otherwise it will most likely overflow memory capacity.
 '''
 
 # # Example meteo distribution plot (adjust pickle filename to your own)

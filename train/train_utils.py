@@ -58,11 +58,15 @@ def train_model(model, data_loaders, weights, args):
 
 def create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train, epoch_loss_val):
 	'''
-	Update the checkpoint dictionary after each epoch. Returns the updated dictionary. 
+	Update the checkpoint dictionary after each epoch. 
 
 	:param checkpoint_dict: current checkpoint dictionary
-	:param model: model object
-	:param measures: F1
+	:param model: pytorch model object
+	:param measures: f1-score macro score and average accuracy score for epoch
+	:param epoch: current epoch
+	:param epoch_loss_train: average train data loss of epoch
+	:param epoch_loss_val: average validation loss of epoch
+	:return: checkpoint dictionary
 
 	'''
 	# Update variables if the model state is better than previous model states 
@@ -83,6 +87,19 @@ def create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train,
 
 
 def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
+	'''
+	Runs a single epoch.
+
+	:param model: pytorch model object
+	:param loaders: dictionary containing train and validation loaders
+	:param optimizer: pytorch optimizer object 
+	:param criterion: pytorch entropy loss
+	:param epoch: current epoch
+	:param start: model training start time
+	:param args: parser arguments
+	:return: updated model, model selection measures, epoch train loss and epoch validation loss
+	'''
+
 	running_loss_train = 0.0
 	running_correct_train = 0.0
 	running_loss_val = 0.0
@@ -145,7 +162,7 @@ def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 				validation_predictions.extend(list(predictions))
 
 			# If model is in training phase, show loss every N iterations
-			# if (i+1) % 2 == 0:
+			# if (i+1) % 50 == 0:
 			if phase == 'train':
 				print ('Epoch {}/{}, Iteration {}/{} Train Running Loss: {:.4f}'.format(epoch, args.epochs, i+1, 
 																			len(loaders[phase].dataset)//args.batch_size + 1, 

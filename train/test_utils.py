@@ -5,12 +5,11 @@ from helpers.model_plotters import show_cm
 
 def test_model(model, dataloader, args):
     """
-    Tests a specified model on all the manually labeled highway camera
-    images. 
+    Tests a specified model on all the manually labeled highway camera images. Shows confusion matrix and overall accuracy.
     
-    :param model: Trained model to evaluate
-    :param test_features: All test features as tensor
-    :param test_targets: All test labels as tensor
+    :param model: trained model to evaluate
+    :param dataloader: pytorch dataloader object for the train dataset
+    :param args: parser arguments
     """
     
     test_images, test_targets, idx, test_filepaths, meteo = next(iter(dataloader))

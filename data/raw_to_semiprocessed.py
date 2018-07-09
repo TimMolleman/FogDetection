@@ -86,7 +86,7 @@ def fetch_primary_dataframes(cursor, distance_filepath):
 	# Distance to nearest meteo stations for all cameras
 	distance_df = pd.read_csv(distance_filepath)
 	print('Loaded the distance dataframe')
-	
+
 	# Get the images in dataframe
 	cursor.execute("SELECT * FROM images WHERE day_phase = '1'")
 	img_df = pd.DataFrame(cursor.fetchall(), columns=['img_id', 'camera_id', 'datetime', 'filepath', 'day_phase'])
@@ -714,8 +714,7 @@ def main():
 
 	# main_df = pd.read_pickle('semi-processed/before_filling_meteo')
 	main_df = main_df[:1000]
-	print('first info')
-	print(main_df.info())
+	
 	# Fill missing meteo values 
 	if args.missing_meteo_method == 'IDW':
 		

@@ -4,10 +4,10 @@ def perform_ztest(p1, p2, n, bonferonni):
     '''
     Performs pairwise Z-test on two accuracies for the test sets. 
     
-    :param p1: Accuracy of model 1
-    :param p2: Accuracy of model 2
-    :param n: Number of samples for model 1 and model 2 (same in our case)
-    :param bonferonni: Positive integer determining number of pairwise z-tests perormed
+    :param p1: accuracy of model 1
+    :param p2: accuracy of model 2
+    :param n: number of samples for model 1 and model 2 (same in our case)
+    :param bonferonni: positive integer determining number of pairwise z-tests perormed
     '''
     # Determine significance level
     alpha = 0.05 / bonferonni
@@ -24,5 +24,5 @@ def perform_ztest(p1, p2, n, bonferonni):
        'z = {:2f} with p-value: {:.3f} < {}'.format(p1, p2, Z, p, alpha))
     
     
-# Example of performing z-test. 
-perform_ztest(0.9104, 0.9080, 804, 1)
+# Example of performing z-test (uncomment)
+# perform_ztest(0.9104, 0.9080, 804, 1)

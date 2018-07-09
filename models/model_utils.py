@@ -5,10 +5,10 @@ import torch.nn as nn
 
 def get_model(args):
     '''
-    Retrieve model to for training. 
+    Retrieve model to train. 
 
     :param args: parser arguments
-    :returns: model specified in args.model_name
+    :return: model that is specified in args.model_name
     '''
 
     if args.model_name == 'resnet18':
@@ -38,7 +38,6 @@ def get_model(args):
         meteo_NN = meteo_NN(args.meteo_inputs, args.meteo_hidden_size, args.meteo_outputs)
         model = resnet18_meteo(resnet_model, meteo_NN, args.num_classes)
         
-
         return model
 
     else:

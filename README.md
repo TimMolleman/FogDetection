@@ -1,6 +1,20 @@
 # Fog Detection Using Highway Cameras
 
-This thesis project studied whether or not convolutional neural networks (CNNs) can be used for the purpose of classifying highway images on fog conditions. Additionally, it was researched if adding four meteorological variables (air temperature, relative humidity, dew point and wind speed)to the model resulted in a better performance.
+This thesis project studied whether or not convolutional neural networks (CNNs) can be used for the purpose of classifying highway images on fog conditions. Additionally, it was researched if adding four meteorological variables (air temperature, relative humidity, dew point and wind speed) to the model resulted in a better performance. A Resnet18 model pretrained on ImageNet was trained for classifying images, resulting in a 91.05% accuracy on the test dataset. A separate 1-hidden layer network was used to input the four meteorological inputs. This network was merged with the Resnet18 network in the fully connected layer, as to have both images and meteorological variables influence the classifications. This network resulted in 92.66% accuracy on the test dataset.
+
+## Project Structure
+- A number of modules used for various purposes
+	- train: defines code for training network
+    - data: contains data directories and scripts for obtaining data
+    - models: define models and their utils
+    - helpers: contains number of helper scripts
+- Two directories for saving models/plots and other images
+	- experiments: directory to save trained models to
+	- img: directory to save plots and other images to
+- notebooks: contains notebooks used for conducting experiments
+- directory to run scripts from
+	- main.py: used for running models
+    
 
 ## Data
 To start training models, data has to be processed first. In the command line, navigate to the `data/` folder and run
@@ -24,5 +38,4 @@ To train a model, navigate to the top-level directory `FogDetection/` and run
 python3 main.py
 ```
 
-In the `main.py` file, argparser is used for passing arguments to functions. If you want to specify a different model for training or change other arguments (e.g. Use meteoroligical variables for training, run on CUDA, number of epochs to run training), this can be done in this main file. After the model training is completed, the models are saved to '.pth.tar' files and are directly tested on the test dataset.
-'
+In the `main.py` file, argparser is used for passing arguments to functions. If you want to specify a different model for training or change other arguments (e.g. Use meteorological variables for training, run using CUDA, number of epochs to run training), this can be done in the main file. After the model training is completed, the models are saved to '.pth.tar' files and are directly tested on the test dataset.
