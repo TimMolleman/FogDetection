@@ -15,7 +15,7 @@ parser.add_argument('--from_conv_layer', type=int, default=False, help='train co
 parser.add_argument('--include_meteo', type=int, default=False, help='include meteo in model training or not [default: False]')
 
 # Model
-parser.add_argument('--model_name', nargs="?", type=str, default='shallow_CNN', help="Form of model, i.e resnet18, simple_CNN, etc.")
+parser.add_argument('--model_name', type=str, default='shallow_CNN', help="Form of model, i.e resnet18, simple_CNN, etc.")
 parser.add_argument('--num_classes', type=int, default=3, help='number of classes to predict [default: 3]')
 parser.add_argument('--meteo_inputs', type=int, default=4, help='number of meteorological variables included [default: 4]')
 parser.add_argument('--meteo_hidden_size', type=int, default=15, help='size of hidden layer for meteo net [default: 15]')
@@ -72,7 +72,6 @@ if __name__ == '__main__':
 	test_data = np.load(args.test_data_path)[()]
 	test_dataset = FogDataset(test_data, custom_transforms['eval'])
 	test_loader = create_loader(test_dataset, 'test', args.batch_size)
-
 	test = test_model(trained_model, train_loader, args)
 
 

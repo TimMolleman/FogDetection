@@ -201,7 +201,7 @@ def ommit_labels_highway(highway_images, highway_targets, highway_filepaths, hig
 	:param highway_filepaths: numpy array containing highway filepaths
 	:param highway_meteo: numpy array containing highway meteo variables
 	:param ommitance_filepath: contains paths of images that have to be ommitted	
-	:return: all input arrays with bad indices ommitted.
+	:return: all input arrays with bad indices ommitted
 	'''
 
 	with open(ommitance_filepath) as file:
@@ -302,7 +302,6 @@ def main():
 	# Read the semi-processed data
 	main_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.main_dataframe))
 	test_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.test_dataframe))
-	# print(main_df.info())
 
 	# Get KNMI df and highway df
 	KNMI_df = main_df[main_df['location_name'].isin(KNMI_NAMES)][:500]
