@@ -3,19 +3,28 @@
 This thesis project studied whether or not convolutional neural networks (CNNs) can be used for the purpose of classifying highway images on fog conditions. Additionally, it was researched if adding four meteorological variables (air temperature, relative humidity, dew point and wind speed) to the model resulted in a better performance. A Resnet18 model pretrained on ImageNet was trained for classifying images, resulting in a 91.05% accuracy on the test dataset. A separate 1-hidden layer network was used to input the four meteorological inputs. This network was merged with the Resnet18 network in the fully connected layer, as to have both images and meteorological variables influence the classifications. This network resulted in 92.66% accuracy on the test dataset.
 
 ## Project Structure
-- A number of modules used for various purposes
-	- train: defines code for training network
-    - data: contains data directories and scripts for obtaining data
+- A number of packages used for various purposes
+	- train: defines code for training and testing of network
+		- train_utils.py: module containing code used for training of models
+		- test_utils.py: module containing code used for testing of models
+    - data: contains data directories and modules for obtaining data
+    	- raw_to_semiprocessed.py: module used for acquiring raw data and putting in pandas dataframe
+    	- to_processed.py: module used for transforming pandas dataframe to processed data
     - models: define models and their utils
-    - helpers: contains number of helper scripts
-- Two directories for saving models/plots and other images
+    	- train_utils.py: models and utils
+    - helpers: package containing numer of helper modules
+    	- data_plotters.py: used for plotting data
+    	- model_plotters.py: model training related plots
+    	- data_loader.py: contains dataloader to use in training
+    	- metrics.py: some metrics
+- Two directories for saving models and plots/other images
 	- experiments: directory to save trained models to
 	- img: directory to save plots and other images to
-- notebooks: contains notebooks used for conducting experiments
+- notebooks: contains number of notebooks used for conducting experiments
 - directory to run scripts from
 	- main.py: used for running models
     
-
+ 
 ## Data
 To start training models, data has to be processed first. In the command line, navigate to the `data/` folder and run
 
