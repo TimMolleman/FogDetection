@@ -45,8 +45,9 @@ def train_model(model, data_loaders, weights, args):
 		# Update other checkpoints
 		create_checkpoint(checkpoint_dict, model, measures, epoch, epoch_loss_train, epoch_loss_val)
 
-		# Save the checkpoint at specified path
-		torch.save(checkpoint_dict, args.save_path)
+		# Save the checkpoint at specified path, only if path is defined
+		if args.model_save_path:
+			torch.save(checkpoint_dict, '{}{}_completed'.format(args.model_save_path, args.model_name))
 
 	# Print the end status of the model
 	elapsed_time = time.time() - start
@@ -126,7 +127,7 @@ def run_epoch(model, loaders, optimizer, criterion, epoch, start, args):
 				features = features.cuda()
 				targets = targets.cuda()
 				meteo_features = meteo_features.cuda()
-			print(features.size())
+
 			if phase == 'train':
 				optimizer.zero_grad()
 

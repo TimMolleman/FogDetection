@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import torch
 
 custom_transforms = {
     'train' : transforms.Compose([
@@ -38,6 +39,7 @@ class FogDataset(Dataset):
         meteo = self.meteo[index]
 
         return (image, target, index, filepath, meteo)
+
 
     def __len__(self):
         return len(self.targets)

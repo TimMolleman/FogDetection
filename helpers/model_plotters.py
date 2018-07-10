@@ -12,6 +12,7 @@ def show_cm(targets, predictions):
 
 	:param targets: Numpy array containing targets
 	:param predictions: Numpy array containing corresponding predictions
+	:return: figure object containing confusion matrix
 	'''
 	cm = confusion_matrix(y_target=targets, 
 						y_predicted=predictions, 
@@ -20,13 +21,18 @@ def show_cm(targets, predictions):
 	fig, ax = plot_confusion_matrix(conf_mat=cm)
 	plt.show(block=True)
 
+	return fig
+
+
 def plot_loss_curves(training_loss, validation_loss):
 	"""
 	Plots loss curves of trained model.
 	
 	:param training_loss: List with training loss for every epoch.
 	:param validation_loss: List with validation loss for every epoch.
+	:return: figure object containing loss curves
 	"""
+	fig = plt.figure(figsize= (8,8))
 	train_plot, = plt.plot(training_loss, label='Training')
 	val_plot, = plt.plot(validation_loss, label='Validation')
 	plt.title('Loss curves (training/validation)')
@@ -34,3 +40,5 @@ def plot_loss_curves(training_loss, validation_loss):
 	plt.ylabel('Loss')
 	plt.legend(handles=[train_plot, val_plot])
 	plt.show(block=True)
+
+	return fig

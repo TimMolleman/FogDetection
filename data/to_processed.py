@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import re
 import csv
+import torch
 from PIL import Image
 from sklearn import preprocessing
 
@@ -17,8 +18,11 @@ parser.add_argument('--highway_relabel_path', type=str, default='helpers/trainhi
 parser.add_argument('--highway_ommit_path', type=str, default='helpers/ommitancehighway', help='path to file with highway images to be removed')
 parser.add_argument('--test_image_filename', type=str, default='TestImagesRefined.txt', help='path to file with highway images to be removed')
 parser.add_argument('--semi_processed_dir', type=str, default='semi-processed', help='path to directory where dataframes are stored')
-parser.add_argument('--main_dataframe', type=str, default='main_dataframe_harmonie', help='filename of main dataframe')
-parser.add_argument('--test_dataframe', type=str, default='test_df_harmonie', help='filename of test dataframe')
+parser.add_argument('--main_dataframe', type=str, default='main_dataframe_IDW', help='filename of main dataframe')
+parser.add_argument('--test_dataframe', type=str, default='test_df_IDW', help='filename of test dataframe')
+
+# Meteo variable filling method
+parser.add_argument('--meteo_method', type=str, default='IDW', help='method used for filling missing meteorological values, either IDW or harmonie')
 
 # Standardize
 parser.add_argument('--standardize_meteo', type=bool, default=False, help='decides if meteo variables should be standardized [default: False]')
@@ -137,7 +141,7 @@ def df_to_test_dict(test_df, test_dir, filename_test):
 	        	print('Couldn\'t find meteorological variables for {}'.format(filename))
             
 	# Transform lists to arrays and then put them in dictionary 
-	test_features, test_targets = np.asarray(image_list_test), np.asarray(target_list_test)
+	test_features, test_targets = np.asarray(image_list_test), np.asarray(target_list_test).astype(int)
 	test_filepaths, test_meteo = np.asarray(filepath_list_test), np.asarray(meteo_list_test)
 	test_meteo = test_meteo.reshape(len(test_meteo), 4)
 	test_dict = {'images': test_features, 'targets': test_targets, 'filepaths': test_filepaths, 'meteo': test_meteo}
@@ -275,6 +279,10 @@ def split_highway(highway_images, highway_targets, highway_filepaths, highway_me
 	paths_train_highway = np.delete(highway_filepaths, val_idx, 0)
 	meteo_train_highway = np.delete(highway_meteo, val_idx, 0)
 
+	# Meteo to tensors
+	meteo_train_highway = torch.Tensor(meteo_train_highway)
+	meteo_validation = torch.Tensor(meteo_validation)
+
 	# Make dictionaries from the numpy arrays and return
 	highway_train_dict = {'images': X_train_highway, 'targets': y_train_highway, 'filepaths': paths_train_highway, 'meteo': meteo_train_highway}
 	highway_val_dict = {'images': X_validation, 'targets': y_validation, 'filepaths': paths_validation, 'meteo': meteo_validation}
@@ -297,6 +305,26 @@ def standardize_meteo(meteo_np):
 
 	return standardized_meteo
 
+def delete_np_nan(images, targets, filepaths, meteo):
+	'''
+	Double check to make sure no NaN values for visibility are in the numpy arrays.
+
+	:param images: images numpy array
+	:param targets: targets numpy array
+	:param filepaths: filepaths numpy array
+	:param meteo: meteo numpy array
+	:return: numpy arrays with indices in targets array containing NaN removed 
+	'''
+
+	indices = np.isnan(targets)
+
+	images = images[~indices]
+	targets = targets[~indices]
+	filepaths = filepaths[~indices]
+	meteo = meteo[~indices]
+
+	return images, targets, filepaths, meteo
+
 def main():
 
 	# Read the semi-processed data
@@ -311,25 +339,23 @@ def main():
 	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = df_to_numpy_train(KNMI_df, 'KNMI')
 	highway_images, highway_targets, highway_filepaths, highway_meteo = df_to_numpy_train(highway_df, 'highway')
 
-	# highway_images = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_images.npy')
-	# highway_targets = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_targets.npy')
-	# highway_filepaths = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_filepaths.npy')
-	# highway_meteo = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo/highway/change/highway_meteo.npy')
+	highway_images = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_images_IDWValTest.npy')
+	highway_targets = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_targets_IDWValTest.npy')
+	highway_filepaths = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_filepaths_IDWValTest.npy')
+	highway_meteo = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_meteo_IDWValTest.npy')
 
-	# highway_images = highway_images[:10000]
-	# highway_targets = highway_targets[:10000]
-	# highway_filepaths = highway_filepaths[:10000]
-	# highway_meteo = highway_meteo[:10000]
+	# Make sure indices of NaN in targets array are removed from every np array
+	highway_images, highway_targets, highway_filepaths, highway_meteo = delete_np_nan(highway_images, highway_targets, highway_filepaths, highway_meteo)
+	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = delete_np_nan(KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo)
 
-	print(np.bincount(KNMI_targets.astype(int)))
-	print(np.bincount(highway_targets.astype(int)))
+	highway_images = highway_images[:10000]
+	highway_targets = highway_targets[:10000]
+	highway_filepaths = highway_filepaths[:10000]
+	highway_meteo = highway_meteo[:10000]
 
 	# Relabel the KNMI and highway targets
 	KNMI_targets = change_labels(KNMI_targets, KNMI_filepaths, args.knmi_relabel_path)
 	highway_targets = change_labels(highway_targets, highway_filepaths, args.highway_relabel_path)
-
-	print(np.bincount(KNMI_targets.astype(int)))
-	print(np.bincount(highway_targets.astype(int)))
 
 	# Ommit labels of KNMI and highway datasets
 	# KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = ommit_labels_KNMI(KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo)
@@ -339,16 +365,16 @@ def main():
 	highway_train_dict, highway_val_dict = split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.standardize_meteo)
 
 	# Create KNMI dict
-	KNMI_dict = {'images': KNMI_images, 'targets': KNMI_targets, 'filepaths': KNMI_filepaths, 'meteo': KNMI_meteo}
+	KNMI_dict = {'images': KNMI_images, 'targets': KNMI_targets, 'filepaths': KNMI_filepaths, 'meteo': torch.Tensor(KNMI_meteo)}
 
 	# Load the test dictionaries
 	test_dict = df_to_test_dict(test_df, args.test_image_dir, args.test_image_filename)
 
 	# Save the arrays into numpy dictionaries
-	np.save(args.processed_dir + 'KNMI.npy', KNMI_dict)
-	np.save(args.processed_dir + 'highway_train.npy', highway_train_dict)
-	np.save(args.processed_dir + 'highway_val.npy', highway_val_dict)
-	np.save(args.processed_dir + 'test.npy', test_dict)
+	np.save(args.processed_dir + 'KNMI_'+args.meteo_method+'.npy', KNMI_dict)
+	np.save(args.processed_dir + 'highway_train_'+args.meteo_method+'.npy', highway_train_dict)
+	np.save(args.processed_dir + 'highway_val_'+args.meteo_method+'.npy', highway_val_dict)
+	np.save(args.processed_dir + 'test_'+args.meteo_method+'.npy', test_dict)
 
 	print('Done! Processed the data to a dictionary of numpy arrays.')
 

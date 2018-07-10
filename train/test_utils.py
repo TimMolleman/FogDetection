@@ -10,6 +10,7 @@ def test_model(model, dataloader, args):
     :param model: trained model to evaluate
     :param dataloader: pytorch dataloader object for the train dataset
     :param args: parser arguments
+    :return: confusion matrix
     """
     
     test_images, test_targets, idx, test_filepaths, meteo = next(iter(dataloader))
@@ -38,5 +39,18 @@ def test_model(model, dataloader, args):
     test_accuracy = correct / total * 100
 
     # Print results and show the confusion matrix
-    print('Accuracy of {}: {:.2f}%'.format(args.model_name, test_accuracy))
-    show_cm(list(targets.data), list(predictions))
+    print('\nTest results:\nAccuracy of {}: {:.2f}%'.format(args.model_name, test_accuracy))
+    cm = show_cm(list(targets.data), list(predictions))
+
+    return cm
+
+def load_model(filepath):
+    '''
+    Loads a trained model.
+    
+    :param filepath: path to the trained model
+    :return: trained model
+    '''
+    model = torch.load(filepath, map_location=lambda storage, loc: storage)
+
+    return model

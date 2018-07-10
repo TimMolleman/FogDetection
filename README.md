@@ -1,32 +1,32 @@
 # Fog Detection Using Highway Cameras
 
-This thesis project studied whether or not convolutional neural networks (CNNs) can be used for the purpose of classifying highway images on fog conditions. Additionally, it was researched if adding four meteorological variables (air temperature, relative humidity, dew point and wind speed) to the model resulted in a better performance. A Resnet18 model pretrained on ImageNet was trained for classifying images, resulting in a 91.05% accuracy on the test dataset. A separate 1-hidden layer network was used to input the four meteorological inputs. This network was merged with the Resnet18 network in the fully connected layer, as to have both images and meteorological variables influence the classifications. This network resulted in 92.66% accuracy on the test dataset.
+This thesis project studied whether or not convolutional neural networks (CNNs) can be used for the purpose of classifying highway images on fog conditions. Additionally, it was researched if adding four meteorological variables (air temperature, relative humidity, dew point and wind speed)to the model resulted in a better performance. A Resnet18 model pretrained on ImageNet was trained for classifying images, resulting in a 91.05% accuracy on the test dataset. A separate 1-hidden layer network was used to input the four meteorological inputs. This network was merged with the Resnet18 network in the fully connected layer, as to have both images and meteorological variables influence the classifications. This network resulted in 92.66% accuracy on the test dataset.
 
 ## Project Structure
-- A number of packages used for various purposes
-	- train: defines code for training and testing of network
+- A number of packages created for various purposes
+	- train: modules for training and testing of models
 		- train_utils.py: module containing code used for training of models
 		- test_utils.py: module containing code used for testing of models
-    - data: contains data directories and modules for obtaining data
+    - data: data directories and modules for obtaining and processing data
     	- raw_to_semiprocessed.py: module used for acquiring raw data and putting in pandas dataframe
     	- to_processed.py: module used for transforming pandas dataframe to processed data
     - models: define models and their utils
-    	- train_utils.py: models and utils
+    	- model_utils.py: models and utils
     - helpers: package containing numer of helper modules
     	- data_plotters.py: used for plotting data
     	- model_plotters.py: model training related plots
     	- data_loader.py: contains dataloader to use in training
-    	- metrics.py: some metrics
+    	- metrics.py: contains z-test function
 - Two directories for saving models and plots/other images
-	- experiments: directory to save trained models to
+	- experiments: directory to save trained models and results to
 	- img: directory to save plots and other images to
 - notebooks: contains number of notebooks used for conducting experiments
-- directory to run scripts from
-	- main.py: used for running models
+- scripts: directory to run scripts from
+	- main.py: entry point to run model training
+	- test.py: entry point to run tests on models
     
- 
 ## Data
-To start training models, data has to be processed first. In the command line, navigate to the `data/` folder and run
+To start training models, data has to be acquired and processed first. In the command line, navigate to the `data/` directory and run
 
 ```
 python3 raw_to_semiprocessed.py
@@ -47,4 +47,7 @@ To train a model, navigate to the top-level directory `FogDetection/` and run
 python3 main.py
 ```
 
-In the `main.py` file, argparser is used for passing arguments to functions. If you want to specify a different model for training or change other arguments (e.g. Use meteorological variables for training, run using CUDA, number of epochs to run training), this can be done in the main file. After the model training is completed, the models are saved to '.pth.tar' files and are directly tested on the test dataset.
+In the `main.py` file, argparser is used for passing arguments to functions. If you want to specify a different model for training or change other arguments (e.g. Use meteorological variables for training, run using CUDA, number of epochs to run training), this can be done in the main file. During training a checkpoint is saved to a '.pth.tar' file in the `experiments` folder at every epoch. After training is completed, the best model state is directly tested on the test dataset.
+
+## Model testing
+To test a saved model again after training, specify the model path to the trained model that you want to test in the `test.py` arguments.  
