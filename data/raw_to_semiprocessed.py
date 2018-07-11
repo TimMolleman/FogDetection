@@ -711,9 +711,6 @@ def main():
 
 	# # Create main dataframe
 	main_df, locations_df = create_main_df(df_meteo_features, merged_nearest_df, cursor)
-
-	# main_df = pd.read_pickle('semi-processed/before_filling_meteo')
-	main_df = main_df[:1000]
 	
 	# Fill missing meteo values 
 	if args.missing_meteo_method == 'IDW':

@@ -31,17 +31,17 @@ def get_model(args):
 
         return model
 
-    elif args.model_name == 'resnet+meteo_NN':
+    elif args.model_name == 'merged_network':
         
         resnet_model = torchvision.models.resnet18(pretrained=True)
         resnet_model.avgpool = nn.AdaptiveAvgPool2d(1)
-        meteo_NN = meteo_NN(args.meteo_inputs, args.meteo_hidden_size, args.meteo_outputs)
-        model = resnet18_meteo(resnet_model, meteo_NN, args.num_classes)
+        meteo_net = meteo_NN(args.meteo_inputs, args.meteo_hidden_size, args.meteo_outputs)
+        model = resnet18_meteo(resnet_model, meteo_net, args.num_classes)
         
         return model
 
     else:
-        raise ValueError("Define one of 'resnet18', 'simple_CNN' or 'resnet+meteo_NN'")
+        raise ValueError("Define one of 'resnet18', 'simple_CNN' or 'merged_network'")
 
 class meteo_NN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):

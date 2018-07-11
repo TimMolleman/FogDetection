@@ -17,7 +17,7 @@ parser.add_argument('--lr', type=float, default=0.0001, help='initial learning r
 parser.add_argument('--epochs', type=int, default=2, help='default number of epochs for the training [default 2]')
 parser.add_argument('--batch_size', type=int, default=164, help='batch size for training [default: 164]')
 parser.add_argument('--from_conv_layer', type=int, default=False, help='train convolutional layers or only fc layer [default: False]')
-parser.add_argument('--include_meteo', type=int, default=False, help='include meteo in model training or not [default: False]')
+parser.add_argument('--include_meteo', type=int, default=True, help='include meteo in model training or not [default: False]')
 
 # Model
 parser.add_argument('--model_name', type=str, default='merged_network', help='Form of model: resnet18, simple_CNN or merged_network')
@@ -42,20 +42,6 @@ if __name__ == '__main__':
 	# Load dictionaries containing numpy arrays
 	train_data, val_data = np.load(args.train_data_path)[()], np.load(args.val_data_path)[()]
 
-	train_data['targets'][100:150] = 2
-	train_data['targets'][0:100] = 1
-	train_data['targets'] = train_data['targets'][:300]
-	train_data['images'] = train_data['images'][:300]
-	train_data['meteo'] = train_data['meteo'][:300]
-	train_data['filepaths'] = train_data['filepaths'][:300]
-
-	val_data['targets'][100:150] = 2
-	val_data['targets'][0:100] = 1
-	val_data['targets'] = val_data['targets'][:300]
-	val_data['images'] = val_data['images'][:300]
-	val_data['meteo'] = val_data['meteo'][:300]
-	val_data['filepaths'] = val_data['filepaths'][:300]
-
 	# Get loss weights
 	loss_weights = calculate_loss_weights(train_data['targets'])
 
@@ -77,5 +63,5 @@ if __name__ == '__main__':
 	# Test model
 	test_data = np.load(args.test_data_path)[()]
 	test_dataset = FogDataset(test_data, custom_transforms['eval'])
-	test_loader = create_loader(test_dataset, 'test', args.batch_size)
-	cm = test_model(trained_model, train_loader, args)
+	test_loader = create_loader(test_dataset, 'test', len(test_data['targets']))
+	cm = test_model(trained_model, test_loader, args)

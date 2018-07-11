@@ -23,11 +23,12 @@ def test_model(model, dataloader, args):
     targets = Variable(test_targets)
     total = len(targets)
     
+    # Feed test features into model
     if args.include_meteo:
         meteo = Variable(meteo.type(torch.FloatTensor))
-
-    # Feed test features into model
-    outputs = model(features)
+        outputs = model(features, meteo)
+    else:
+        outputs = model(features)
     
     # Loss and optimization
     loss = criterion(outputs, targets)

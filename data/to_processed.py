@@ -332,34 +332,24 @@ def main():
 	test_df = pd.read_pickle('{}/{}'.format(args.semi_processed_dir, args.test_dataframe))
 
 	# Get KNMI df and highway df
-	KNMI_df = main_df[main_df['location_name'].isin(KNMI_NAMES)][:500]
-	highway_df = create_highway_df(main_df)[:500]
+	KNMI_df = main_df[main_df['location_name'].isin(KNMI_NAMES)]
+	highway_df = create_highway_df(main_df)
 
 	# Load KNMI df and highway df to numpy arrays
 	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = df_to_numpy_train(KNMI_df, 'KNMI')
 	highway_images, highway_targets, highway_filepaths, highway_meteo = df_to_numpy_train(highway_df, 'highway')
 
-	highway_images = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_images_IDWValTest.npy')
-	highway_targets = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_targets_IDWValTest.npy')
-	highway_filepaths = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_filepaths_IDWValTest.npy')
-	highway_meteo = np.load('/Volumes/TIMPP/UnusedKNMI/numpyfiles/meteo_train/valtestinterpolated/highway/highway_meteo_IDWValTest.npy')
-
 	# Make sure indices of NaN in targets array are removed from every np array
 	highway_images, highway_targets, highway_filepaths, highway_meteo = delete_np_nan(highway_images, highway_targets, highway_filepaths, highway_meteo)
 	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = delete_np_nan(KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo)
-
-	highway_images = highway_images[:10000]
-	highway_targets = highway_targets[:10000]
-	highway_filepaths = highway_filepaths[:10000]
-	highway_meteo = highway_meteo[:10000]
 
 	# Relabel the KNMI and highway targets
 	KNMI_targets = change_labels(KNMI_targets, KNMI_filepaths, args.knmi_relabel_path)
 	highway_targets = change_labels(highway_targets, highway_filepaths, args.highway_relabel_path)
 
-	# Ommit labels of KNMI and highway datasets
-	# KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = ommit_labels_KNMI(KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo)
-	# highway_images, highway_targets, highway_filepaths, highway_meteo = ommit_labels_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.highway_ommit_path)
+	# Ommit manually specified images from KNMI and highway datasets
+	KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo = ommit_labels_KNMI(KNMI_images, KNMI_targets, KNMI_filepaths, KNMI_meteo)
+	highway_images, highway_targets, highway_filepaths, highway_meteo = ommit_labels_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.highway_ommit_path)
 
 	# Split the highway dataset into training and validation
 	highway_train_dict, highway_val_dict = split_highway(highway_images, highway_targets, highway_filepaths, highway_meteo, args.standardize_meteo)
